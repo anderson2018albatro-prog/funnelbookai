@@ -23,6 +23,7 @@ function ProjectDetail() {
   const qc = useQueryClient();
   const genEbook = useServerFn(generateEbook);
   const genPage = useServerFn(generateSalesPage);
+  const genPdf = useServerFn(generateEbookPdf);
   const [busy, setBusy] = useState<string | null>(null);
 
   const { data: project } = useQuery({
