@@ -9,8 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
-import { generateEbook } from "@/lib/ebook.functions";
 
 export const Route = createFileRoute("/_authenticated/new-project")({
   component: NewProject,
@@ -18,7 +16,6 @@ export const Route = createFileRoute("/_authenticated/new-project")({
 
 function NewProject() {
   const navigate = useNavigate();
-  const genEbook = useServerFn(generateEbook);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     nome_projeto: "", nicho: "", publico_alvo: "", promessa: "",
@@ -37,7 +34,11 @@ function NewProject() {
       if (error) throw error;
 
       toast.info("Gerando ebook com IA... pode levar até 1 minuto.");
-      await genEbook({ data: { projectId: project.id } });
+      const { data: gen, error: gErr } = await supabase.functions.invoke("generate-ebook", {
+        body: { projectId: project.id },
+      });
+      if (gErr) throw gErr;
+      if ((gen as any)?.error) throw new Error((gen as any).error);
       toast.success("Ebook gerado!");
       navigate({ to: "/projects/$id", params: { id: project.id } });
     } catch (err: any) {

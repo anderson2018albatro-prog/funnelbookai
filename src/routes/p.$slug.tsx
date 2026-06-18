@@ -16,7 +16,7 @@ const fetchPage = createServerFn({ method: "GET" })
     );
     const { data: page } = await supabase
       .from("sales_pages")
-      .select("headline, subheadline, beneficios, aprendizados, faq, garantia, cta_text, cta_url, slug")
+      .select("headline, subheadline, beneficios, aprendizados, faq, garantia, cta_text, cta_url, slug, html_content")
       .eq("slug", data.slug)
       .maybeSingle();
     if (!page) return null;
@@ -50,6 +50,8 @@ function PublicSalesPage() {
   const beneficios = (page.beneficios as string[]) ?? [];
   const aprendizados = (page.aprendizados as string[]) ?? [];
   const faq = (page.faq as { pergunta: string; resposta: string }[]) ?? [];
+  let extra: { problema?: string; solucao?: string } = {};
+  try { extra = page.html_content ? JSON.parse(page.html_content) : {}; } catch { extra = {}; }
 
   return (
     <div className="min-h-screen bg-background">
@@ -68,6 +70,26 @@ function PublicSalesPage() {
           </a>
         </div>
       </section>
+
+      {/* Problema / Solução */}
+      {(extra.problema || extra.solucao) && (
+        <section className="mx-auto max-w-4xl px-4 py-14 sm:px-6 sm:py-20">
+          <div className="grid gap-4 md:grid-cols-2">
+            {extra.problema && (
+              <div className="rounded-2xl border border-destructive/30 bg-card p-5 sm:p-6">
+                <h3 className="font-display text-lg font-semibold text-destructive sm:text-xl">O problema</h3>
+                <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground sm:text-base">{extra.problema}</p>
+              </div>
+            )}
+            {extra.solucao && (
+              <div className="rounded-2xl border border-primary/30 bg-gradient-card p-5 sm:p-6">
+                <h3 className="font-display text-lg font-semibold text-primary sm:text-xl">A solução</h3>
+                <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground sm:text-base">{extra.solucao}</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Benefits */}
       <section className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-20">
