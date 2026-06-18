@@ -52,6 +52,21 @@ function ProjectDetail() {
     try { await genPage({ data: { projectId: id } }); await refetchPage(); toast.success("Página criada"); }
     catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   }
+  async function downloadPdf() {
+    if (!ebook) return;
+    setBusy("pdf");
+    try {
+      const res = await genPdf({ data: { ebookId: ebook.id } });
+      const bin = atob(res.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = res.filename; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF gerado");
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  }
   async function saveEbookMeta() {
     if (!ebook) return;
     const { error } = await supabase.from("ebooks").update({
