@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sparkles, Megaphone, ExternalLink, Save } from "lucide-react";
+import { Sparkles, Megaphone, ExternalLink, Save, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { generateEbook } from "@/lib/ebook.functions";
 import { generateSalesPage } from "@/lib/sales-page.functions";
+import { generateEbookPdf } from "@/lib/ebook-pdf.functions";
 
 export const Route = createFileRoute("/_authenticated/projects/$id")({
   component: ProjectDetail,
