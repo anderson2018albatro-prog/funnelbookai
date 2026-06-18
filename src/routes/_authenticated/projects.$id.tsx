@@ -5,14 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sparkles, Megaphone, ExternalLink, Save, FileDown } from "lucide-react";
 import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
-import { generateEbook } from "@/lib/ebook.functions";
-import { generateSalesPage } from "@/lib/sales-page.functions";
-import { generateEbookPdf } from "@/lib/ebook-pdf.functions";
+import { generateEbookPdfBrowser } from "@/lib/ebook-pdf-client";
 
 export const Route = createFileRoute("/_authenticated/projects/$id")({
   component: ProjectDetail,
@@ -21,9 +17,6 @@ export const Route = createFileRoute("/_authenticated/projects/$id")({
 function ProjectDetail() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
-  const genEbook = useServerFn(generateEbook);
-  const genPage = useServerFn(generateSalesPage);
-  const genPdf = useServerFn(generateEbookPdf);
   const [busy, setBusy] = useState<string | null>(null);
 
   const { data: project } = useQuery({
@@ -44,29 +37,55 @@ function ProjectDetail() {
 
   async function regenEbook() {
     setBusy("ebook");
-    try { await genEbook({ data: { projectId: id } }); await refetchEbook(); toast.success("Ebook regenerado"); }
-    catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-ebook", {
+        body: { projectId: id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      await refetchEbook();
+      toast.success("Ebook gerado!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao gerar ebook");
+    } finally {
+      setBusy(null);
+    }
   }
+
   async function makePage() {
     setBusy("page");
-    try { await genPage({ data: { projectId: id } }); await refetchPage(); toast.success("Página criada"); }
-    catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-sales-page", {
+        body: { projectId: id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      await refetchPage();
+      toast.success("Página de vendas criada!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao gerar página");
+    } finally {
+      setBusy(null);
+    }
   }
+
   async function downloadPdf() {
     if (!ebook) return;
     setBusy("pdf");
     try {
-      const res = await genPdf({ data: { ebookId: ebook.id } });
-      const bin = atob(res.base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-      const a = document.createElement("a");
-      a.href = url; a.download = res.filename; a.click();
-      URL.revokeObjectURL(url);
+      generateEbookPdfBrowser({
+        titulo: ebook.titulo,
+        subtitulo: ebook.subtitulo,
+        conteudo: ebook.conteudo as any,
+      });
       toast.success("PDF gerado");
-    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao gerar PDF");
+    } finally {
+      setBusy(null);
+    }
   }
+
   async function saveEbookMeta() {
     if (!ebook) return;
     const { error } = await supabase.from("ebooks").update({
@@ -104,8 +123,8 @@ function ProjectDetail() {
                   <FileDown className="mr-2 h-4 w-4" />{busy === "pdf" ? "Gerando PDF..." : "Baixar PDF"}
                 </Button>
               )}
-              <Button variant="outline" onClick={regenEbook} disabled={busy === "ebook"}>
-                <Sparkles className="mr-2 h-4 w-4" />{busy === "ebook" ? "Gerando..." : "Regenerar ebook"}
+              <Button onClick={regenEbook} disabled={busy === "ebook"} className="bg-gradient-primary text-primary-foreground shadow-glow">
+                <Sparkles className="mr-2 h-4 w-4" />{busy === "ebook" ? "Gerando..." : ebook ? "Regenerar Ebook" : "GERAR EBOOK"}
               </Button>
             </div>
 
@@ -147,10 +166,16 @@ function ProjectDetail() {
                     <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{conteudo.conclusao}</p>
                   </section>
                 )}
+                {conteudo?.cta_final && (
+                  <section className="border-t border-border pt-4">
+                    <h3 className="font-display text-lg font-semibold">Próximo passo</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-primary">{conteudo.cta_final}</p>
+                  </section>
+                )}
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-card p-10 text-center text-muted-foreground">
-                Nenhum ebook ainda. Clique em Regenerar para criar.
+                Nenhum ebook ainda. Clique em "GERAR EBOOK" para criar.
               </div>
             )}
           </TabsContent>
@@ -162,10 +187,16 @@ function ProjectDetail() {
                   <Button variant="outline"><ExternalLink className="mr-2 h-4 w-4" />Ver página pública</Button>
                 </Link>
               )}
-              <Button onClick={makePage} disabled={busy === "page"} className="bg-gradient-primary text-primary-foreground shadow-glow">
+              <Button onClick={makePage} disabled={busy === "page" || !ebook} className="bg-gradient-primary text-primary-foreground shadow-glow">
                 <Megaphone className="mr-2 h-4 w-4" />{busy === "page" ? "Gerando..." : salesPage ? "Regenerar página" : "GERAR PÁGINA DE VENDAS"}
               </Button>
             </div>
+
+            {!ebook && (
+              <div className="rounded-md border border-border bg-surface p-3 text-xs text-muted-foreground">
+                Gere o ebook antes de criar a página de vendas.
+              </div>
+            )}
 
             {salesPage ? (
               <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
