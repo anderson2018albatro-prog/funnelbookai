@@ -23,16 +23,16 @@ export function DashboardShell({ children, title }: { children: ReactNode; title
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-1 flex-col">
-          <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-md">
-            <div className="flex items-center gap-3">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md sm:px-4">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <SidebarTrigger />
-              {title && <h1 className="font-display text-lg font-semibold">{title}</h1>}
+              {title && <h1 className="truncate font-display text-base font-semibold sm:text-lg">{title}</h1>}
             </div>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" /> Sair
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="shrink-0">
+              <LogOut className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Sair</span>
             </Button>
           </header>
-          <main className="flex-1 p-6">{children}</main>
+          <main className="flex-1 p-3 sm:p-4 md:p-6">{children}</main>
         </div>
       </div>
     </SidebarProvider>
