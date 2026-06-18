@@ -14,7 +14,172 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ebooks: {
+        Row: {
+          conteudo: Json
+          created_at: string
+          id: string
+          project_id: string
+          subtitulo: string | null
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          conteudo?: Json
+          created_at?: string
+          id?: string
+          project_id: string
+          subtitulo?: string | null
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          conteudo?: Json
+          created_at?: string
+          id?: string
+          project_id?: string
+          subtitulo?: string | null
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebooks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          nome: string | null
+          plano: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          nome?: string | null
+          plano?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome?: string | null
+          plano?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          idioma: string
+          nicho: string
+          nome_projeto: string
+          promessa: string
+          publico_alvo: string
+          quantidade_capitulos: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idioma?: string
+          nicho: string
+          nome_projeto: string
+          promessa: string
+          publico_alvo: string
+          quantidade_capitulos?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idioma?: string
+          nicho?: string
+          nome_projeto?: string
+          promessa?: string
+          publico_alvo?: string
+          quantidade_capitulos?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sales_pages: {
+        Row: {
+          aprendizados: Json
+          beneficios: Json
+          created_at: string
+          cta_text: string
+          cta_url: string | null
+          faq: Json
+          garantia: string | null
+          headline: string
+          html_content: string | null
+          id: string
+          project_id: string
+          public_url: string | null
+          slug: string
+          subheadline: string | null
+          updated_at: string
+        }
+        Insert: {
+          aprendizados?: Json
+          beneficios?: Json
+          created_at?: string
+          cta_text?: string
+          cta_url?: string | null
+          faq?: Json
+          garantia?: string | null
+          headline: string
+          html_content?: string | null
+          id?: string
+          project_id: string
+          public_url?: string | null
+          slug: string
+          subheadline?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aprendizados?: Json
+          beneficios?: Json
+          created_at?: string
+          cta_text?: string
+          cta_url?: string | null
+          faq?: Json
+          garantia?: string | null
+          headline?: string
+          html_content?: string | null
+          id?: string
+          project_id?: string
+          public_url?: string | null
+          slug?: string
+          subheadline?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_pages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
