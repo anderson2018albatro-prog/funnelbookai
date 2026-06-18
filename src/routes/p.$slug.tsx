@@ -16,7 +16,7 @@ const fetchPage = createServerFn({ method: "GET" })
     );
     const { data: page } = await supabase
       .from("sales_pages")
-      .select("headline, subheadline, beneficios, aprendizados, faq, garantia, cta_text, cta_url, slug")
+      .select("headline, subheadline, beneficios, aprendizados, faq, garantia, cta_text, cta_url, slug, html_content")
       .eq("slug", data.slug)
       .maybeSingle();
     if (!page) return null;
@@ -50,6 +50,8 @@ function PublicSalesPage() {
   const beneficios = (page.beneficios as string[]) ?? [];
   const aprendizados = (page.aprendizados as string[]) ?? [];
   const faq = (page.faq as { pergunta: string; resposta: string }[]) ?? [];
+  let extra: { problema?: string; solucao?: string } = {};
+  try { extra = page.html_content ? JSON.parse(page.html_content) : {}; } catch { extra = {}; }
 
   return (
     <div className="min-h-screen bg-background">
