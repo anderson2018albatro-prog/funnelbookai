@@ -57,6 +57,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "FunnelBook AI — Crie ebooks e páginas de vendas com IA" },
       { name: "twitter:description", content: "Plataforma SaaS para criar ebooks profissionais e páginas de vendas em minutos usando inteligência artificial." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/88c3e7f5-9bc8-46b0-84b1-82243e5c7c57/id-preview-ea1a6324--d4dae2fe-94a4-4209-a079-79efb24e3a85.lovable.app-1781815048133.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/88c3e7f5-9bc8-46b0-84b1-82243e5c7c57/id-preview-ea1a6324--d4dae2fe-94a4-4209-a079-79efb24e3a85.lovable.app-1781815048133.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
