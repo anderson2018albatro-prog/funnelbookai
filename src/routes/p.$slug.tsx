@@ -71,6 +71,26 @@ function PublicSalesPage() {
         </div>
       </section>
 
+      {/* Problema / Solução */}
+      {(extra.problema || extra.solucao) && (
+        <section className="mx-auto max-w-4xl px-4 py-14 sm:px-6 sm:py-20">
+          <div className="grid gap-4 md:grid-cols-2">
+            {extra.problema && (
+              <div className="rounded-2xl border border-destructive/30 bg-card p-5 sm:p-6">
+                <h3 className="font-display text-lg font-semibold text-destructive sm:text-xl">O problema</h3>
+                <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground sm:text-base">{extra.problema}</p>
+              </div>
+            )}
+            {extra.solucao && (
+              <div className="rounded-2xl border border-primary/30 bg-gradient-card p-5 sm:p-6">
+                <h3 className="font-display text-lg font-semibold text-primary sm:text-xl">A solução</h3>
+                <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground sm:text-base">{extra.solucao}</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Benefits */}
       <section className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-20">
         <h2 className="text-center font-display text-2xl font-bold sm:text-3xl">Benefícios</h2>
