@@ -98,7 +98,12 @@ function ProjectDetail() {
           </TabsList>
 
           <TabsContent value="ebook" className="mt-4 space-y-4">
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {ebook && (
+                <Button variant="outline" onClick={downloadPdf} disabled={busy === "pdf"}>
+                  <FileDown className="mr-2 h-4 w-4" />{busy === "pdf" ? "Gerando PDF..." : "Baixar PDF"}
+                </Button>
+              )}
               <Button variant="outline" onClick={regenEbook} disabled={busy === "ebook"}>
                 <Sparkles className="mr-2 h-4 w-4" />{busy === "ebook" ? "Gerando..." : "Regenerar ebook"}
               </Button>
