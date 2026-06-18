@@ -55,14 +55,14 @@ function Landing() {
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <div className="grid gap-6 md:grid-cols-3">
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-3">
           {[
             { icon: BookOpen, title: "Ebook completo", desc: "Título, sumário, capítulos e conclusão escritos por IA no seu idioma." },
             { icon: Megaphone, title: "Página de vendas", desc: "Headline, benefícios, FAQ e CTA prontos para converter." },
             { icon: Zap, title: "URL pública", desc: "Cada projeto gera um link instantâneo para compartilhar com seu público." },
           ].map((f) => (
-            <div key={f.title} className="rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant">
+            <div key={f.title} className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant sm:p-6">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-primary">
                 <f.icon className="h-5 w-5" />
               </div>
@@ -74,16 +74,16 @@ function Landing() {
       </section>
 
       {/* CTA */}
-      <section className="mx-auto max-w-4xl px-6 pb-24">
-        <div className="rounded-3xl border border-border bg-gradient-card p-10 text-center shadow-elegant">
-          <h2 className="font-display text-3xl font-bold md:text-4xl">Pronto para lançar seu produto digital?</h2>
-          <p className="mx-auto mt-3 max-w-xl text-muted-foreground">Crie sua conta gratuita e gere seu primeiro ebook em menos de 5 minutos.</p>
+      <section className="mx-auto max-w-4xl px-4 pb-16 sm:px-6 sm:pb-24">
+        <div className="rounded-3xl border border-border bg-gradient-card p-6 text-center shadow-elegant sm:p-10">
+          <h2 className="font-display text-2xl font-bold sm:text-3xl md:text-4xl">Pronto para lançar seu produto digital?</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">Crie sua conta gratuita e gere seu primeiro ebook em menos de 5 minutos.</p>
           <ul className="mx-auto mt-6 grid max-w-md gap-2 text-left text-sm text-muted-foreground">
             {["Geração ilimitada de capítulos", "Páginas de vendas responsivas", "Publicação pública instantânea"].map((p) => (
-              <li key={p} className="flex items-center gap-2"><Check className="h-4 w-4 text-success" /> {p}</li>
+              <li key={p} className="flex items-center gap-2"><Check className="h-4 w-4 shrink-0 text-success" /> {p}</li>
             ))}
           </ul>
-          <Link to="/auth"><Button size="lg" className="mt-8 bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">Começar agora</Button></Link>
+          <Link to="/auth"><Button size="lg" className="mt-8 w-full bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90 sm:w-auto">Começar agora</Button></Link>
         </div>
       </section>
 
