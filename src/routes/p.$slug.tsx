@@ -55,14 +55,14 @@ function PublicSalesPage() {
     <div className="min-h-screen bg-background">
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-hero">
-        <div className="mx-auto max-w-4xl px-6 py-20 text-center md:py-28">
+        <div className="mx-auto max-w-4xl px-4 py-14 text-center sm:px-6 sm:py-20 md:py-28">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted-foreground">
             <Sparkles className="h-3 w-3 text-primary" /> Lançamento
           </div>
-          <h1 className="mt-6 font-display text-4xl font-bold leading-tight md:text-6xl">{page.headline}</h1>
-          {page.subheadline && <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">{page.subheadline}</p>}
-          <a href={page.cta_url ?? "#cta"}>
-            <Button size="lg" className="mt-10 bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+          <h1 className="mt-6 font-display text-3xl font-bold leading-tight sm:text-4xl md:text-6xl">{page.headline}</h1>
+          {page.subheadline && <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground sm:mt-6 sm:text-lg">{page.subheadline}</p>}
+          <a href={page.cta_url ?? "#cta"} className="inline-block w-full sm:w-auto">
+            <Button size="lg" className="mt-8 w-full bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90 sm:mt-10 sm:w-auto">
               {page.cta_text}
             </Button>
           </a>
@@ -70,11 +70,11 @@ function PublicSalesPage() {
       </section>
 
       {/* Benefits */}
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <h2 className="text-center font-display text-3xl font-bold">Benefícios</h2>
-        <div className="mt-10 grid gap-4 md:grid-cols-2">
+      <section className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-20">
+        <h2 className="text-center font-display text-2xl font-bold sm:text-3xl">Benefícios</h2>
+        <div className="mt-8 grid gap-3 sm:mt-10 sm:gap-4 md:grid-cols-2">
           {beneficios.map((b, i) => (
-            <div key={i} className="flex gap-3 rounded-2xl border border-border bg-gradient-card p-5">
+            <div key={i} className="flex gap-3 rounded-2xl border border-border bg-gradient-card p-4 text-sm sm:p-5 sm:text-base">
               <Check className="mt-1 h-5 w-5 shrink-0 text-success" />
               <span>{b}</span>
             </div>
@@ -83,24 +83,24 @@ function PublicSalesPage() {
       </section>
 
       {/* Learn */}
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <h2 className="text-center font-display text-3xl font-bold">O que você aprenderá</h2>
-        <ul className="mx-auto mt-10 grid max-w-3xl gap-3">
+      <section className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-20">
+        <h2 className="text-center font-display text-2xl font-bold sm:text-3xl">O que você aprenderá</h2>
+        <ul className="mx-auto mt-8 grid max-w-3xl gap-3 sm:mt-10">
           {aprendizados.map((a, i) => (
-            <li key={i} className="flex items-start gap-3 rounded-xl bg-surface p-4">
+            <li key={i} className="flex items-start gap-3 rounded-xl bg-surface p-4 text-sm sm:text-base">
               <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-primary text-xs font-semibold text-primary-foreground">{i + 1}</div>
-              {a}
+              <span className="min-w-0">{a}</span>
             </li>
           ))}
         </ul>
       </section>
 
       {/* FAQ */}
-      <section className="mx-auto max-w-3xl px-6 py-20">
-        <h2 className="text-center font-display text-3xl font-bold">Perguntas frequentes</h2>
-        <div className="mt-10 space-y-3">
+      <section className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-20">
+        <h2 className="text-center font-display text-2xl font-bold sm:text-3xl">Perguntas frequentes</h2>
+        <div className="mt-8 space-y-3 sm:mt-10">
           {faq.map((f, i) => (
-            <details key={i} className="group rounded-xl border border-border bg-card p-5">
+            <details key={i} className="group rounded-xl border border-border bg-card p-4 sm:p-5">
               <summary className="cursor-pointer list-none font-medium">{f.pergunta}</summary>
               <p className="mt-2 text-sm text-muted-foreground">{f.resposta}</p>
             </details>
@@ -110,8 +110,8 @@ function PublicSalesPage() {
 
       {/* Garantia */}
       {page.garantia && (
-        <section className="mx-auto max-w-3xl px-6 py-10">
-          <div className="rounded-2xl border border-border bg-gradient-card p-6 text-center shadow-elegant">
+        <section className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
+          <div className="rounded-2xl border border-border bg-gradient-card p-5 text-center shadow-elegant sm:p-6">
             <Shield className="mx-auto h-8 w-8 text-success" />
             <h3 className="mt-3 font-display text-xl font-bold">Garantia</h3>
             <p className="mt-2 text-sm text-muted-foreground">{page.garantia}</p>
@@ -120,11 +120,11 @@ function PublicSalesPage() {
       )}
 
       {/* Final CTA */}
-      <section id="cta" className="mx-auto max-w-4xl px-6 py-24">
-        <div className="rounded-3xl border border-border bg-gradient-card p-10 text-center shadow-elegant">
-          <h2 className="font-display text-3xl font-bold md:text-4xl">{page.headline}</h2>
-          <a href={page.cta_url ?? "#"}>
-            <Button size="lg" className="mt-8 bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+      <section id="cta" className="mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-24">
+        <div className="rounded-3xl border border-border bg-gradient-card p-6 text-center shadow-elegant sm:p-10">
+          <h2 className="font-display text-2xl font-bold sm:text-3xl md:text-4xl">{page.headline}</h2>
+          <a href={page.cta_url ?? "#"} className="inline-block w-full sm:w-auto">
+            <Button size="lg" className="mt-8 w-full bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90 sm:w-auto">
               {page.cta_text}
             </Button>
           </a>
