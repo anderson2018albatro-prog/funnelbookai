@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FunnelBook AI">
+  <rect width="64" height="64" rx="14" fill="#111827"/>
+  <path d="M17 15h20c6 0 10 4 10 10v24H27c-6 0-10-4-10-10V15Z" fill="#22C55E"/>
+  <path d="M25 23h14v6H25v-6Zm0 12h19v6H25v-6Z" fill="#F8FAFC"/>
+</svg>

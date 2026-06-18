@@ -58,7 +58,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:title", content: "FunnelBook AI — Crie ebooks e páginas de vendas com IA" },
       { name: "twitter:description", content: "Plataforma SaaS para criar ebooks profissionais e páginas de vendas em minutos usando inteligência artificial." },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
