@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sparkles, Megaphone, ExternalLink, Save } from "lucide-react";
+import { Sparkles, Megaphone, ExternalLink, Save, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { generateEbook } from "@/lib/ebook.functions";
 import { generateSalesPage } from "@/lib/sales-page.functions";
+import { generateEbookPdf } from "@/lib/ebook-pdf.functions";
 
 export const Route = createFileRoute("/_authenticated/projects/$id")({
   component: ProjectDetail,
@@ -22,6 +23,7 @@ function ProjectDetail() {
   const qc = useQueryClient();
   const genEbook = useServerFn(generateEbook);
   const genPage = useServerFn(generateSalesPage);
+  const genPdf = useServerFn(generateEbookPdf);
   const [busy, setBusy] = useState<string | null>(null);
 
   const { data: project } = useQuery({
@@ -49,6 +51,21 @@ function ProjectDetail() {
     setBusy("page");
     try { await genPage({ data: { projectId: id } }); await refetchPage(); toast.success("Página criada"); }
     catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  }
+  async function downloadPdf() {
+    if (!ebook) return;
+    setBusy("pdf");
+    try {
+      const res = await genPdf({ data: { ebookId: ebook.id } });
+      const bin = atob(res.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = res.filename; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF gerado");
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   }
   async function saveEbookMeta() {
     if (!ebook) return;
@@ -81,7 +98,12 @@ function ProjectDetail() {
           </TabsList>
 
           <TabsContent value="ebook" className="mt-4 space-y-4">
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {ebook && (
+                <Button variant="outline" onClick={downloadPdf} disabled={busy === "pdf"}>
+                  <FileDown className="mr-2 h-4 w-4" />{busy === "pdf" ? "Gerando PDF..." : "Baixar PDF"}
+                </Button>
+              )}
               <Button variant="outline" onClick={regenEbook} disabled={busy === "ebook"}>
                 <Sparkles className="mr-2 h-4 w-4" />{busy === "ebook" ? "Gerando..." : "Regenerar ebook"}
               </Button>
