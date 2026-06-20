@@ -16,41 +16,33 @@ export type Database = {
     Tables: {
       ebooks: {
         Row: {
-          conteudo: Json
+          content: Json
           created_at: string
           id: string
-          project_id: string
-          subtitulo: string | null
-          titulo: string
+          niche: string | null
+          title: string
           updated_at: string
+          user_id: string
         }
         Insert: {
-          conteudo?: Json
+          content?: Json
           created_at?: string
           id?: string
-          project_id: string
-          subtitulo?: string | null
-          titulo: string
+          niche?: string | null
+          title: string
           updated_at?: string
+          user_id: string
         }
         Update: {
-          conteudo?: Json
+          content?: Json
           created_at?: string
           id?: string
-          project_id?: string
-          subtitulo?: string | null
-          titulo?: string
+          niche?: string | null
+          title?: string
           updated_at?: string
+          user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "ebooks_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -79,106 +71,73 @@ export type Database = {
         }
         Relationships: []
       }
-      projects: {
+      sales_pages: {
         Row: {
           created_at: string
+          ebook_id: string
+          html_content: string
           id: string
-          idioma: string
-          nicho: string
-          nome_projeto: string
-          promessa: string
-          publico_alvo: string
-          quantidade_capitulos: number
+          is_published: boolean
+          slug: string
+          title: string
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          ebook_id: string
+          html_content?: string
           id?: string
-          idioma?: string
-          nicho: string
-          nome_projeto: string
-          promessa: string
-          publico_alvo: string
-          quantidade_capitulos?: number
+          is_published?: boolean
+          slug: string
+          title: string
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          ebook_id?: string
+          html_content?: string
           id?: string
-          idioma?: string
-          nicho?: string
-          nome_projeto?: string
-          promessa?: string
-          publico_alvo?: string
-          quantidade_capitulos?: number
+          is_published?: boolean
+          slug?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_pages_ebook_id_fkey"
+            columns: ["ebook_id"]
+            isOneToOne: false
+            referencedRelation: "ebooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_credits: {
+        Row: {
+          created_at: string
+          credits: number
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits?: number
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          id?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: []
-      }
-      sales_pages: {
-        Row: {
-          aprendizados: Json
-          beneficios: Json
-          created_at: string
-          cta_text: string
-          cta_url: string | null
-          faq: Json
-          garantia: string | null
-          headline: string
-          html_content: string | null
-          id: string
-          project_id: string
-          public_url: string | null
-          slug: string
-          subheadline: string | null
-          updated_at: string
-        }
-        Insert: {
-          aprendizados?: Json
-          beneficios?: Json
-          created_at?: string
-          cta_text?: string
-          cta_url?: string | null
-          faq?: Json
-          garantia?: string | null
-          headline: string
-          html_content?: string | null
-          id?: string
-          project_id: string
-          public_url?: string | null
-          slug: string
-          subheadline?: string | null
-          updated_at?: string
-        }
-        Update: {
-          aprendizados?: Json
-          beneficios?: Json
-          created_at?: string
-          cta_text?: string
-          cta_url?: string | null
-          faq?: Json
-          garantia?: string | null
-          headline?: string
-          html_content?: string | null
-          id?: string
-          project_id?: string
-          public_url?: string | null
-          slug?: string
-          subheadline?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sales_pages_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
       }
     }
     Views: {
