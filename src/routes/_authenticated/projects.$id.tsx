@@ -6,7 +6,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sparkles, Megaphone, ExternalLink, Save, FileDown } from "lucide-react";
+import { Sparkles, Megaphone, ExternalLink, Save, FileDown, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { generateEbookPdfBrowser } from "@/lib/ebook-pdf-client";
 
@@ -97,6 +97,28 @@ function ProjectDetail() {
     qc.invalidateQueries({ queryKey: ["ebook", id] });
   }
 
+  function copyEbookText() {
+    if (!ebook) return;
+    const c = ebook.conteudo as any;
+    const md = [
+      `# ${ebook.titulo}`,
+      ebook.subtitulo ? `## ${ebook.subtitulo}\n` : "",
+      c?.introducao ? `## Introdução\n\n${c.introducao}\n` : "",
+      ...(c?.capitulos ?? []).map((cap: any, i: number) => `## Capítulo ${i + 1}: ${cap.titulo}\n\n${cap.conteudo}\n`),
+      c?.conclusao ? `## Conclusão\n\n${c.conclusao}\n` : "",
+      c?.cta_final ? `\n---\n${c.cta_final}` : "",
+    ].filter(Boolean).join("\n");
+    navigator.clipboard.writeText(md);
+    toast.success("Conteúdo copiado!");
+  }
+
+  function copyPublicUrl() {
+    if (!salesPage?.slug) return;
+    const url = `${window.location.origin}/p/${salesPage.slug}`;
+    navigator.clipboard.writeText(url);
+    toast.success("URL copiada!");
+  }
+
   const conteudo = ebook?.conteudo as any;
 
   return (
@@ -138,7 +160,10 @@ function ProjectDetail() {
                   <label className="text-xs text-muted-foreground">Subtítulo</label>
                   <Input value={editSub ?? ebook.subtitulo ?? ""} onChange={(e) => setEditSub(e.target.value)} />
                 </div>
-                <Button size="sm" variant="outline" onClick={saveEbookMeta}><Save className="mr-2 h-4 w-4" />Salvar</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={saveEbookMeta}><Save className="mr-2 h-4 w-4" />Salvar</Button>
+                  <Button size="sm" variant="outline" onClick={copyEbookText}><Copy className="mr-2 h-4 w-4" />Copiar conteúdo</Button>
+                </div>
 
                 {conteudo?.introducao && (
                   <section>
@@ -204,8 +229,12 @@ function ProjectDetail() {
                   <h3 className="font-display text-2xl font-bold">{salesPage.headline}</h3>
                   <p className="mt-2 text-muted-foreground">{salesPage.subheadline}</p>
                 </div>
-                <div className="rounded-md border border-border bg-surface p-3 text-xs">
-                  URL pública: <code className="text-primary">/p/{salesPage.slug}</code>
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface p-3 text-xs">
+                  <span>URL pública:</span>
+                  <code className="text-primary">/p/{salesPage.slug}</code>
+                  <Button size="sm" variant="ghost" className="ml-auto h-7" onClick={copyPublicUrl}>
+                    <Copy className="mr-1 h-3 w-3" />Copiar
+                  </Button>
                 </div>
                 <section>
                   <h4 className="font-display font-semibold">Benefícios</h4>
