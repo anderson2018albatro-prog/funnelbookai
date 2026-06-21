@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { Copy, ExternalLink, Megaphone, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Megaphone, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/sales-pages")({
@@ -44,7 +44,10 @@ function SalesList() {
                     <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(url); toast.success("URL copiada"); }}>
                       <Copy className="h-3 w-3" />
                     </Button>
-                    <a href={url} target="_blank" rel="noopener" className="ml-auto">
+                    <Link to="/sales-pages/$id/edit" params={{ id: s.id }} className="ml-auto">
+                      <Button size="sm" variant="secondary"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
+                    </Link>
+                    <a href={url} target="_blank" rel="noopener">
                       <Button size="sm" variant="outline"><ExternalLink className="mr-1 h-3 w-3" /> Abrir</Button>
                     </a>
                     <Button size="sm" variant="destructive" onClick={() => remove(s.id)}><Trash2 className="h-3 w-3" /></Button>

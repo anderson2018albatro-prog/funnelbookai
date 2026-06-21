@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
-import { AlertTriangle, Copy, ExternalLink, Loader2, Megaphone, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Save, Trash2 } from "lucide-react";
+import { jsPDF } from "jspdf";
 
 export const Route = createFileRoute("/_authenticated/ebooks/$id")({
   component: EbookDetail,
@@ -130,6 +131,105 @@ function EbookDetail() {
     toast.success("Conteúdo copiado");
   }
 
+  function downloadPDF() {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 56;
+    const maxW = pageW - margin * 2;
+    let y = margin;
+
+    function addPageNumber(n: number) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(String(n), pageW / 2, pageH - 24, { align: "center" });
+      doc.setTextColor(0);
+    }
+    function newPage() {
+      doc.addPage();
+      y = margin;
+    }
+    function ensure(h: number) {
+      if (y + h > pageH - margin) newPage();
+    }
+    function writeHeading(text: string, size = 18) {
+      ensure(size + 20);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(text, maxW) as string[];
+      doc.text(lines, margin, y);
+      y += lines.length * (size + 4) + 8;
+    }
+    function writeBody(text: string) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      const lines = doc.splitTextToSize(text, maxW) as string[];
+      for (const line of lines) {
+        ensure(16);
+        doc.text(line, margin, y);
+        y += 16;
+      }
+      y += 6;
+    }
+
+    // Capa
+    doc.setFillColor(99, 102, 241);
+    doc.rect(0, 0, pageW, pageH, "F");
+    doc.setTextColor(255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(32);
+    const tLines = doc.splitTextToSize(c.title ?? title, maxW) as string[];
+    doc.text(tLines, pageW / 2, pageH / 2 - 30, { align: "center" });
+    if (c.subtitle) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(16);
+      const sLines = doc.splitTextToSize(c.subtitle, maxW) as string[];
+      doc.text(sLines, pageW / 2, pageH / 2 + 20, { align: "center" });
+    }
+    doc.setTextColor(0);
+    newPage();
+
+    if (c.summary?.length) {
+      writeHeading("Sumário", 22);
+      c.summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
+      newPage();
+    }
+    if (c.introduction) {
+      writeHeading("Introdução", 20);
+      writeBody(c.introduction);
+    }
+    (c.chapters ?? []).forEach((ch, i) => {
+      newPage();
+      writeHeading(`Capítulo ${i + 1}: ${ch.title}`, 20);
+      writeBody(ch.content);
+    });
+    if (c.conclusion) {
+      newPage();
+      writeHeading("Conclusão", 20);
+      writeBody(c.conclusion);
+    }
+    if (c.call_to_action) {
+      ensure(80);
+      writeHeading("Próximos passos", 18);
+      writeBody(c.call_to_action);
+    }
+    if (c.bonus?.length) {
+      newPage();
+      writeHeading("Bônus", 20);
+      c.bonus.forEach((b) => writeBody(`• ${b}`));
+    }
+
+    const total = doc.getNumberOfPages();
+    for (let p = 2; p <= total; p++) {
+      doc.setPage(p);
+      addPageNumber(p - 1);
+    }
+
+    const safe = (c.title ?? title).replace(/[^\w\u00C0-\u017F\s-]/g, "").trim().slice(0, 60) || "ebook";
+    doc.save(`${safe}.pdf`);
+  }
+
   const publicUrl = salesQ.data ? `${window.location.origin}/p/${salesQ.data.slug}` : null;
   const salesStatus = (salesQ.data as any)?.status;
 
@@ -164,6 +264,7 @@ function EbookDetail() {
               <span className="ml-2">Salvar</span>
             </Button>
             <Button onClick={copyContent} disabled={status !== "completed"} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
+            <Button onClick={downloadPDF} disabled={status !== "completed"} variant="outline"><FileDown className="mr-2 h-4 w-4" /> Baixar PDF</Button>
             <Button onClick={remove} disabled={busy === "delete"} variant="destructive" className="ml-auto">
               <Trash2 className="mr-2 h-4 w-4" /> Excluir
             </Button>
@@ -246,7 +347,10 @@ function EbookDetail() {
               <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(publicUrl); toast.success("URL copiada"); }}>
                 <Copy className="h-3 w-3" />
               </Button>
-              <a href={publicUrl} target="_blank" rel="noopener" className="ml-auto">
+              <a href={`/sales-pages/${salesQ.data!.id}/edit`} className="ml-auto">
+                <Button size="sm" variant="secondary"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
+              </a>
+              <a href={publicUrl} target="_blank" rel="noopener">
                 <Button size="sm" variant="outline"><ExternalLink className="mr-1 h-3 w-3" /> Abrir</Button>
               </a>
             </div>

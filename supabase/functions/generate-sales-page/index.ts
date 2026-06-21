@@ -37,6 +37,26 @@ function stripFences(s: string) {
   return c;
 }
 
+function buildBlocks(sp: any, fallbackTitle: string) {
+  return {
+    order: ["hero","product","promessa","beneficios","para_quem","aprendizado","bonus","depoimentos","oferta","garantia","faq","final_cta"],
+    data: {
+      hero: { visible: true, headline: sp.headline ?? fallbackTitle, subheadline: sp.subheadline ?? "", cta_text: sp.cta ?? "Quero agora" },
+      product: { visible: false, image_url: "", video_url: "" },
+      promessa: { visible: true, title: "A grande promessa", text: sp.promessa_principal ?? "" },
+      beneficios: { visible: true, title: "Benefícios", items: sp.beneficios ?? [] },
+      para_quem: { visible: true, title: "Para quem é", items: sp.para_quem ?? [] },
+      aprendizado: { visible: true, title: "O que você vai aprender", items: sp.aprendizado ?? [] },
+      bonus: { visible: (sp.bonus ?? []).length > 0, title: "🎁 Bônus exclusivos", items: sp.bonus ?? [] },
+      depoimentos: { visible: false, title: "O que dizem", items: [] },
+      oferta: { visible: true, title: "Oferta especial", description: sp.oferta ?? "", price: "", cta_text: sp.cta ?? "Quero agora", cta_url: "#cta-final" },
+      garantia: { visible: !!sp.garantia, title: "✅ Garantia", text: sp.garantia ?? "" },
+      faq: { visible: (sp.faq ?? []).length > 0, title: "Perguntas frequentes", items: sp.faq ?? [] },
+      final_cta: { visible: true, headline: sp.headline ?? fallbackTitle, cta_text: sp.cta ?? "Garantir o meu agora", cta_url: "#" },
+    },
+  };
+}
+
 function buildHtml(sp: any, title: string) {
   const list = (arr: string[] = []) => arr.map((b) => `<li>${esc(b)}</li>`).join("");
   const beneficios = list(sp.beneficios);
@@ -169,8 +189,9 @@ Retorne APENAS JSON válido:
     const sp = JSON.parse(stripFences(raw));
     const title = sp.headline ?? ebook.title;
     const html = buildHtml(sp, title);
+    const blocks = buildBlocks(sp, title);
     const { error } = await admin.from("sales_pages").update({
-      title, html_content: html, status: "completed", error_message: null,
+      title, html_content: html, blocks, status: "completed", error_message: null,
     }).eq("id", pageId);
     if (error) throw new Error(error.message);
     console.log("[generate-sales-page] concluído", pageId);

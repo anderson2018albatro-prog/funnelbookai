@@ -106,43 +106,52 @@ export type Database = {
       }
       sales_pages: {
         Row: {
+          blocks: Json | null
           created_at: string
           ebook_id: string
           error_message: string | null
           html_content: string
           id: string
+          image_url: string | null
           is_published: boolean
           slug: string
           status: string
           title: string
           updated_at: string
           user_id: string
+          video_url: string | null
         }
         Insert: {
+          blocks?: Json | null
           created_at?: string
           ebook_id: string
           error_message?: string | null
           html_content?: string
           id?: string
+          image_url?: string | null
           is_published?: boolean
           slug: string
           status?: string
           title: string
           updated_at?: string
           user_id: string
+          video_url?: string | null
         }
         Update: {
+          blocks?: Json | null
           created_at?: string
           ebook_id?: string
           error_message?: string | null
           html_content?: string
           id?: string
+          image_url?: string | null
           is_published?: boolean
           slug?: string
           status?: string
           title?: string
           updated_at?: string
           user_id?: string
+          video_url?: string | null
         }
         Relationships: [
           {
