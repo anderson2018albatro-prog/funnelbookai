@@ -18,6 +18,7 @@ import { Route as AuthenticatedSalesPagesRouteImport } from './routes/_authentic
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedNewEbookRouteImport } from './routes/_authenticated/new-ebook'
 import { Route as AuthenticatedEbooksRouteImport } from './routes/_authenticated/ebooks'
+import { Route as AuthenticatedDebugRouteImport } from './routes/_authenticated/debug'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedSalesPagesIndexRouteImport } from './routes/_authenticated/sales-pages.index'
@@ -69,6 +70,11 @@ const AuthenticatedEbooksRoute = AuthenticatedEbooksRouteImport.update({
   path: '/ebooks',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDebugRoute = AuthenticatedDebugRouteImport.update({
+  id: '/debug',
+  path: '/debug',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/assistant': typeof AuthenticatedAssistantRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/debug': typeof AuthenticatedDebugRoute
   '/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/new-ebook': typeof AuthenticatedNewEbookRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/assistant': typeof AuthenticatedAssistantRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/debug': typeof AuthenticatedDebugRoute
   '/new-ebook': typeof AuthenticatedNewEbookRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/p/$slug': typeof PSlugRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/assistant': typeof AuthenticatedAssistantRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/debug': typeof AuthenticatedDebugRoute
   '/_authenticated/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/_authenticated/new-ebook': typeof AuthenticatedNewEbookRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/assistant'
     | '/dashboard'
+    | '/debug'
     | '/ebooks'
     | '/new-ebook'
     | '/profile'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/assistant'
     | '/dashboard'
+    | '/debug'
     | '/new-ebook'
     | '/profile'
     | '/p/$slug'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/assistant'
     | '/_authenticated/dashboard'
+    | '/_authenticated/debug'
     | '/_authenticated/ebooks'
     | '/_authenticated/new-ebook'
     | '/_authenticated/profile'
@@ -274,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEbooksRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/debug': {
+      id: '/_authenticated/debug'
+      path: '/debug'
+      fullPath: '/debug'
+      preLoaderRoute: typeof AuthenticatedDebugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -351,6 +370,7 @@ const AuthenticatedSalesPagesRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDebugRoute: typeof AuthenticatedDebugRoute
   AuthenticatedEbooksRoute: typeof AuthenticatedEbooksRouteWithChildren
   AuthenticatedNewEbookRoute: typeof AuthenticatedNewEbookRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
@@ -360,6 +380,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAssistantRoute: AuthenticatedAssistantRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDebugRoute: AuthenticatedDebugRoute,
   AuthenticatedEbooksRoute: AuthenticatedEbooksRouteWithChildren,
   AuthenticatedNewEbookRoute: AuthenticatedNewEbookRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
