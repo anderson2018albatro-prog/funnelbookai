@@ -1,0 +1,1 @@
+ALTER TABLE public.sales_pages ALTER COLUMN ebook_id DROP NOT NULL;

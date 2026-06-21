@@ -165,7 +165,7 @@ export type Database = {
         Row: {
           blocks: Json | null
           created_at: string
-          ebook_id: string
+          ebook_id: string | null
           error_message: string | null
           html_content: string
           id: string
@@ -181,7 +181,7 @@ export type Database = {
         Insert: {
           blocks?: Json | null
           created_at?: string
-          ebook_id: string
+          ebook_id?: string | null
           error_message?: string | null
           html_content?: string
           id?: string
@@ -197,7 +197,7 @@ export type Database = {
         Update: {
           blocks?: Json | null
           created_at?: string
-          ebook_id?: string
+          ebook_id?: string | null
           error_message?: string | null
           html_content?: string
           id?: string
