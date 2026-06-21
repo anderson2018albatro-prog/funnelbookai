@@ -216,6 +216,7 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
+    const paginas = Math.min(Math.max(Number(body.paginas) || Number(body.capitulos) * 4 || 25, 8), 50);
     const briefing = {
       tema: body.tema,
       publico_alvo: body.publico_alvo,
@@ -223,7 +224,7 @@ Deno.serve(async (req) => {
       problema: body.problema ?? "",
       idioma: body.idioma ?? "Português",
       tom_voz: body.tom_voz ?? "Profissional e acessível",
-      capitulos: Math.min(Math.max(Number(body.capitulos) || 8, 3), 15),
+      paginas,
       uso: body.uso ?? "venda",
     };
     if (!briefing.tema || !briefing.publico_alvo) {
