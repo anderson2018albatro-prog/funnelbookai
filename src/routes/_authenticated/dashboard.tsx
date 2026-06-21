@@ -93,6 +93,11 @@ function Dashboard() {
                         <Copy className="h-3 w-3" />
                       </Button>
                     )}
+                    {sp && (
+                      <Link to="/sales-pages/$id/edit" params={{ id: sp.id }}>
+                        <Button size="sm" variant="ghost"><Pencil className="mr-1 h-3 w-3" /> Editar página</Button>
+                      </Link>
+                    )}
                     <Link to="/ebooks/$id" params={{ id: p.id }}>
                       <Button size="sm" variant="ghost"><ArrowRight className="h-4 w-4" /></Button>
                     </Link>
