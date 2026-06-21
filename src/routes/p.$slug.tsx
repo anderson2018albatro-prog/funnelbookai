@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
+import { renderBlocksToHtml, type SalesBlocks } from "@/lib/sales-blocks";
 
 const fetchPage = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ slug: z.string() }).parse(d))
@@ -14,12 +15,15 @@ const fetchPage = createServerFn({ method: "GET" })
     );
     const { data: page } = await supabase
       .from("sales_pages")
-      .select("title, slug, html_content, is_published")
+      .select("title, slug, html_content, blocks, is_published")
       .eq("slug", data.slug)
       .eq("is_published", true)
       .maybeSingle();
     if (!page) return null;
-    return page;
+    const html = page.blocks
+      ? renderBlocksToHtml(page.blocks as SalesBlocks, page.title)
+      : page.html_content;
+    return { title: page.title, slug: page.slug, html };
   });
 
 const pageOpts = (slug: string) =>
@@ -44,6 +48,5 @@ function PublicSalesPage() {
   const { slug } = Route.useParams();
   const { data: page } = useSuspenseQuery(pageOpts(slug));
   if (!page) throw notFound();
-
-  return <div dangerouslySetInnerHTML={{ __html: page.html_content }} />;
+  return <div dangerouslySetInnerHTML={{ __html: page.html }} />;
 }
