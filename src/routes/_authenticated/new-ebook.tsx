@@ -112,8 +112,24 @@ function NewEbook() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="caps">Quantidade de capítulos (3 a 15)</Label>
-                <Input id="caps" type="number" min={3} max={15} value={form.capitulos} onChange={(e) => setForm({ ...form, capitulos: Number(e.target.value) || 10 })} />
+                <Label>Tamanho do ebook</Label>
+                <Select value={form.tamanho} onValueChange={(v) => setForm({ ...form, tamanho: v as any })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="curto">Curto (10–15 páginas)</SelectItem>
+                    <SelectItem value="medio">Médio (20–30 páginas)</SelectItem>
+                    <SelectItem value="completo">Completo (40–50 páginas)</SelectItem>
+                    <SelectItem value="custom">Personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.tamanho === "custom" && (
+                  <div className="mt-2">
+                    <Label htmlFor="pgs" className="text-xs">Páginas aproximadas (10 a 50)</Label>
+                    <Input id="pgs" type="number" min={10} max={50} value={form.paginas}
+                      onChange={(e) => setForm({ ...form, paginas: Math.min(50, Math.max(10, Number(e.target.value) || 25)) })} />
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">Será gerado com ~{effectivePages} páginas.</p>
               </div>
               <div>
                 <Label>Uso</Label>
