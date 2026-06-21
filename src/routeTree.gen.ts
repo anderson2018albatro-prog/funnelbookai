@@ -15,12 +15,9 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as AuthenticatedSalesPagesRouteImport } from './routes/_authenticated/sales-pages'
-import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
-import { Route as AuthenticatedNewProjectRouteImport } from './routes/_authenticated/new-project'
 import { Route as AuthenticatedEbooksRouteImport } from './routes/_authenticated/ebooks'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedProjectsIdRouteImport } from './routes/_authenticated/projects.$id'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -51,19 +48,9 @@ const AuthenticatedSalesPagesRoute = AuthenticatedSalesPagesRouteImport.update({
   path: '/sales-pages',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedNewProjectRoute = AuthenticatedNewProjectRouteImport.update({
-  id: '/new-project',
-  path: '/new-project',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedEbooksRoute = AuthenticatedEbooksRouteImport.update({
@@ -76,11 +63,6 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedProjectsIdRoute = AuthenticatedProjectsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AuthenticatedProjectsRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -88,12 +70,9 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ebooks': typeof AuthenticatedEbooksRoute
-  '/new-project': typeof AuthenticatedNewProjectRoute
   '/profile': typeof AuthenticatedProfileRoute
-  '/projects': typeof AuthenticatedProjectsRouteWithChildren
   '/sales-pages': typeof AuthenticatedSalesPagesRoute
   '/p/$slug': typeof PSlugRoute
-  '/projects/$id': typeof AuthenticatedProjectsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -101,12 +80,9 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ebooks': typeof AuthenticatedEbooksRoute
-  '/new-project': typeof AuthenticatedNewProjectRoute
   '/profile': typeof AuthenticatedProfileRoute
-  '/projects': typeof AuthenticatedProjectsRouteWithChildren
   '/sales-pages': typeof AuthenticatedSalesPagesRoute
   '/p/$slug': typeof PSlugRoute
-  '/projects/$id': typeof AuthenticatedProjectsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,12 +92,9 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/ebooks': typeof AuthenticatedEbooksRoute
-  '/_authenticated/new-project': typeof AuthenticatedNewProjectRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
-  '/_authenticated/projects': typeof AuthenticatedProjectsRouteWithChildren
   '/_authenticated/sales-pages': typeof AuthenticatedSalesPagesRoute
   '/p/$slug': typeof PSlugRoute
-  '/_authenticated/projects/$id': typeof AuthenticatedProjectsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,12 +104,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/dashboard'
     | '/ebooks'
-    | '/new-project'
     | '/profile'
-    | '/projects'
     | '/sales-pages'
     | '/p/$slug'
-    | '/projects/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -144,12 +114,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/dashboard'
     | '/ebooks'
-    | '/new-project'
     | '/profile'
-    | '/projects'
     | '/sales-pages'
     | '/p/$slug'
-    | '/projects/$id'
   id:
     | '__root__'
     | '/'
@@ -158,12 +125,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/dashboard'
     | '/_authenticated/ebooks'
-    | '/_authenticated/new-project'
     | '/_authenticated/profile'
-    | '/_authenticated/projects'
     | '/_authenticated/sales-pages'
     | '/p/$slug'
-    | '/_authenticated/projects/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -218,25 +182,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSalesPagesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/projects': {
-      id: '/_authenticated/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/profile': {
       id: '/_authenticated/profile'
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/new-project': {
-      id: '/_authenticated/new-project'
-      path: '/new-project'
-      fullPath: '/new-project'
-      preLoaderRoute: typeof AuthenticatedNewProjectRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ebooks': {
@@ -253,44 +203,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/projects/$id': {
-      id: '/_authenticated/projects/$id'
-      path: '/$id'
-      fullPath: '/projects/$id'
-      preLoaderRoute: typeof AuthenticatedProjectsIdRouteImport
-      parentRoute: typeof AuthenticatedProjectsRoute
-    }
   }
 }
-
-interface AuthenticatedProjectsRouteChildren {
-  AuthenticatedProjectsIdRoute: typeof AuthenticatedProjectsIdRoute
-}
-
-const AuthenticatedProjectsRouteChildren: AuthenticatedProjectsRouteChildren = {
-  AuthenticatedProjectsIdRoute: AuthenticatedProjectsIdRoute,
-}
-
-const AuthenticatedProjectsRouteWithChildren =
-  AuthenticatedProjectsRoute._addFileChildren(
-    AuthenticatedProjectsRouteChildren,
-  )
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEbooksRoute: typeof AuthenticatedEbooksRoute
-  AuthenticatedNewProjectRoute: typeof AuthenticatedNewProjectRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
-  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRouteWithChildren
   AuthenticatedSalesPagesRoute: typeof AuthenticatedSalesPagesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEbooksRoute: AuthenticatedEbooksRoute,
-  AuthenticatedNewProjectRoute: AuthenticatedNewProjectRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
-  AuthenticatedProjectsRoute: AuthenticatedProjectsRouteWithChildren,
   AuthenticatedSalesPagesRoute: AuthenticatedSalesPagesRoute,
 }
 
@@ -307,3 +233,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
