@@ -366,9 +366,9 @@ function EbookDetail() {
               <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(publicUrl); toast.success("URL copiada"); }}>
                 <Copy className="h-3 w-3" />
               </Button>
-              <a href={`/sales-pages/${salesQ.data!.id}/edit`} className="ml-auto">
+              <Link to="/sales-pages/$id/edit" params={{ id: salesQ.data!.id }} className="ml-auto">
                 <Button size="sm" variant="secondary"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
-              </a>
+              </Link>
               <a href={publicUrl} target="_blank" rel="noopener">
                 <Button size="sm" variant="outline"><ExternalLink className="mr-1 h-3 w-3" /> Abrir</Button>
               </a>
