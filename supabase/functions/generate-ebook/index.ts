@@ -69,6 +69,7 @@ Retorne APENAS JSON válido no schema:
 }
 Cada capítulo deve ter de 500 a 900 palavras em texto corrido, parágrafos separados por \\n\\n. O bônus deve ser uma seção extra acionável.`;
 
+    console.log("[generate-ebook] chamando Lovable AI", { tema, capitulos });
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -77,9 +78,8 @@ Cada capítulo deve ter de 500 a 900 palavras em texto corrido, parágrafos sepa
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "Você responde APENAS com JSON válido, sem markdown." },
+          { role: "system", content: "Você responde APENAS com JSON válido, sem markdown e sem cercas de código." },
           { role: "user", content: prompt },
         ],
       }),
@@ -87,18 +87,29 @@ Cada capítulo deve ter de 500 a 900 palavras em texto corrido, parágrafos sepa
 
     if (!aiRes.ok) {
       const t = await aiRes.text();
+      console.error("[generate-ebook] IA erro", aiRes.status, t);
       if (aiRes.status === 429) return json({ error: "Limite de uso atingido, tente novamente em alguns minutos." }, 429);
       if (aiRes.status === 402) return json({ error: "Créditos de IA esgotados na workspace." }, 402);
-      return json({ error: `IA: ${aiRes.status} ${t}` }, 500);
+      return json({ error: `IA ${aiRes.status}: ${t.slice(0, 300)}` }, 500);
     }
     const ai = await aiRes.json();
-    const content = ai.choices?.[0]?.message?.content;
-    if (!content) return json({ error: "Resposta vazia da IA" }, 500);
+    let content: string = ai.choices?.[0]?.message?.content ?? "";
+    if (!content) {
+      console.error("[generate-ebook] resposta vazia", ai);
+      return json({ error: "Resposta vazia da IA" }, 500);
+    }
+
+    // remove markdown fences se houver
+    content = content.trim();
+    if (content.startsWith("```")) {
+      content = content.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    }
 
     let ebookData: any;
     try {
       ebookData = JSON.parse(content);
-    } catch {
+    } catch (e) {
+      console.error("[generate-ebook] JSON parse falhou. Conteúdo:", content.slice(0, 500));
       return json({ error: "JSON inválido da IA" }, 500);
     }
 
