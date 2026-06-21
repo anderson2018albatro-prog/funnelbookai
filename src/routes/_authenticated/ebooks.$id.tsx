@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -9,6 +9,18 @@ import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { AlertTriangle, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Save, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
+
+/** Normalize a field that the AI may return as string, array, or null. */
+function asArray(v: unknown): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.filter((x) => x != null).map((x) => String(x));
+  if (typeof v === "string") {
+    // split into bullets if multiline, otherwise single item
+    const parts = v.split(/\n\s*(?:[-*•]\s+|\d+[.)]\s+)/).map((s) => s.trim()).filter(Boolean);
+    return parts.length > 1 ? parts : [v];
+  }
+  return [String(v)];
+}
 
 export const Route = createFileRoute("/_authenticated/ebooks/$id")({
   component: EbookDetail,
@@ -117,15 +129,18 @@ function EbookDetail() {
   }
 
   function copyContent() {
+    const summary = asArray(c.summary);
+    const bonus = asArray(c.bonus);
+    const chapters = Array.isArray(c.chapters) ? c.chapters : [];
     const md = [
       `# ${c.title ?? title}`,
       c.subtitle ? `## ${c.subtitle}\n` : "",
       c.introduction ? `\n## Introdução\n\n${c.introduction}` : "",
-      c.summary?.length ? `\n## Sumário\n\n${c.summary.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "",
-      ...(c.chapters ?? []).map((ch, i) => `\n## Capítulo ${i + 1}: ${ch.title}\n\n${ch.content}`),
+      summary.length ? `\n## Sumário\n\n${summary.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "",
+      ...chapters.map((ch: any, i: number) => `\n## Capítulo ${i + 1}: ${ch?.title ?? ""}\n\n${ch?.content ?? ""}`),
       c.conclusion ? `\n## Conclusão\n\n${c.conclusion}` : "",
       c.call_to_action ? `\n## Chamada para Ação\n\n${c.call_to_action}` : "",
-      c.bonus?.length ? `\n## Bônus\n\n${c.bonus.map((b) => `- ${b}`).join("\n")}` : "",
+      bonus.length ? `\n## Bônus\n\n${bonus.map((b) => `- ${b}`).join("\n")}` : "",
     ].filter(Boolean).join("\n");
     navigator.clipboard.writeText(md);
     toast.success("Conteúdo copiado");
@@ -190,19 +205,23 @@ function EbookDetail() {
     doc.setTextColor(0);
     newPage();
 
-    if (c.summary?.length) {
+    const summary = asArray(c.summary);
+    const chapters = Array.isArray(c.chapters) ? c.chapters : [];
+    const bonus = asArray(c.bonus);
+
+    if (summary.length) {
       writeHeading("Sumário", 22);
-      c.summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
+      summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
       newPage();
     }
     if (c.introduction) {
       writeHeading("Introdução", 20);
       writeBody(c.introduction);
     }
-    (c.chapters ?? []).forEach((ch, i) => {
+    chapters.forEach((ch: any, i: number) => {
       newPage();
-      writeHeading(`Capítulo ${i + 1}: ${ch.title}`, 20);
-      writeBody(ch.content);
+      writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
+      writeBody(String(ch?.content ?? ""));
     });
     if (c.conclusion) {
       newPage();
@@ -214,10 +233,10 @@ function EbookDetail() {
       writeHeading("Próximos passos", 18);
       writeBody(c.call_to_action);
     }
-    if (c.bonus?.length) {
+    if (bonus.length) {
       newPage();
       writeHeading("Bônus", 20);
-      c.bonus.forEach((b) => writeBody(`• ${b}`));
+      bonus.forEach((b) => writeBody(`• ${b}`));
     }
 
     const total = doc.getNumberOfPages();
@@ -281,18 +300,18 @@ function EbookDetail() {
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.introduction}</p>
               </>
             )}
-            {c.summary?.length ? (
+            {(() => { const summary = asArray(c.summary); return summary.length ? (
               <>
                 <h3 className="mt-6 font-display text-lg font-semibold">Sumário</h3>
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                  {c.summary.map((s, i) => <li key={i}>{s}</li>)}
+                  {summary.map((s, i) => <li key={i}>{s}</li>)}
                 </ol>
               </>
-            ) : null}
-            {(c.chapters ?? []).map((ch, i) => (
+            ) : null; })()}
+            {(Array.isArray(c.chapters) ? c.chapters : []).map((ch: any, i: number) => (
               <div key={i} className="mt-6">
-                <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch.title}</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{ch.content}</p>
+                <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch?.title ?? ""}</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{String(ch?.content ?? "")}</p>
               </div>
             ))}
             {c.conclusion && (
@@ -307,14 +326,14 @@ function EbookDetail() {
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.call_to_action}</p>
               </>
             )}
-            {c.bonus?.length ? (
+            {(() => { const bonus = asArray(c.bonus); return bonus.length ? (
               <>
                 <h3 className="mt-6 font-display text-lg font-semibold">Bônus sugeridos</h3>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                  {c.bonus.map((b, i) => <li key={i}>{b}</li>)}
+                  {bonus.map((b, i) => <li key={i}>{b}</li>)}
                 </ul>
               </>
-            ) : null}
+            ) : null; })()}
           </div>
         )}
 
@@ -347,9 +366,9 @@ function EbookDetail() {
               <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(publicUrl); toast.success("URL copiada"); }}>
                 <Copy className="h-3 w-3" />
               </Button>
-              <a href={`/sales-pages/${salesQ.data!.id}/edit`} className="ml-auto">
+              <Link to="/sales-pages/$id/edit" params={{ id: salesQ.data!.id }} className="ml-auto">
                 <Button size="sm" variant="secondary"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
-              </a>
+              </Link>
               <a href={publicUrl} target="_blank" rel="noopener">
                 <Button size="sm" variant="outline"><ExternalLink className="mr-1 h-3 w-3" /> Abrir</Button>
               </a>
