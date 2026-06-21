@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
-import { AlertTriangle, Copy, ExternalLink, Loader2, Megaphone, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Save, Trash2 } from "lucide-react";
+import { jsPDF } from "jspdf";
 
 export const Route = createFileRoute("/_authenticated/ebooks/$id")({
   component: EbookDetail,
