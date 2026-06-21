@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Megaphone, Sparkles, Plus, ArrowRight } from "lucide-react";
+import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -20,19 +21,25 @@ function Dashboard() {
       ]);
       return { ebooks: e.count ?? 0, pages: s.count ?? 0, credits: c.data?.credits ?? 0 };
     },
+    refetchInterval: 5000,
   });
 
   const { data: recent } = useQuery({
     queryKey: ["recent-ebooks"],
     queryFn: async () => {
-      const { data } = await supabase.from("ebooks").select("id,title,niche,created_at").order("created_at", { ascending: false }).limit(5);
+      const { data } = await supabase
+        .from("ebooks")
+        .select("id,title,niche,status,created_at, sales_pages(id, slug)")
+        .order("created_at", { ascending: false })
+        .limit(6);
       return data ?? [];
     },
+    refetchInterval: 5000,
   });
 
   const cards = [
-    { label: "Créditos", value: stats?.credits ?? 0, icon: Sparkles },
-    { label: "Ebooks", value: stats?.ebooks ?? 0, icon: BookOpen },
+    { label: "Créditos restantes", value: stats?.credits ?? 0, icon: Sparkles },
+    { label: "Ebooks criados", value: stats?.ebooks ?? 0, icon: BookOpen },
     { label: "Páginas de venda", value: stats?.pages ?? 0, icon: Megaphone },
   ];
 
@@ -44,7 +51,10 @@ function Dashboard() {
             <h2 className="font-display text-2xl font-bold">Bem-vindo de volta 👋</h2>
             <p className="text-sm text-muted-foreground">Gere ebooks e páginas de vendas com IA.</p>
           </div>
-          <Link to="/new-ebook"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
+          <div className="flex gap-2">
+            <Link to="/assistant"><Button variant="outline"><Bot className="mr-2 h-4 w-4" /> Assistente IA</Button></Link>
+            <Link to="/new-ebook"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -61,22 +71,33 @@ function Dashboard() {
 
         <div className="rounded-2xl border border-border bg-card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-display font-semibold">Ebooks recentes</h3>
+            <h3 className="font-display font-semibold">Projetos recentes</h3>
             <Link to="/ebooks" className="text-xs text-muted-foreground hover:text-foreground">Ver todos</Link>
           </div>
           {recent && recent.length > 0 ? (
             <ul className="divide-y divide-border">
-              {recent.map((p) => (
-                <li key={p.id}>
-                  <Link to="/ebooks/$id" params={{ id: p.id }} className="flex items-center justify-between py-3 hover:bg-accent/20 -mx-2 px-2 rounded-md">
-                    <div>
-                      <div className="font-medium">{p.title}</div>
-                      <div className="text-xs text-muted-foreground">{p.niche}</div>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </Link>
-                </li>
-              ))}
+              {recent.map((p: any) => {
+                const sp = p.sales_pages?.[0];
+                const url = sp ? `${window.location.origin}/p/${sp.slug}` : null;
+                return (
+                  <li key={p.id} className="flex items-center justify-between gap-2 py-3">
+                    <Link to="/ebooks/$id" params={{ id: p.id }} className="min-w-0 flex-1 hover:opacity-80">
+                      <div className="truncate font-medium">{p.title}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.niche} · {p.status === "processing" ? "gerando…" : p.status}
+                      </div>
+                    </Link>
+                    {url && (
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(url); toast.success("Link copiado"); }}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    )}
+                    <Link to="/ebooks/$id" params={{ id: p.id }}>
+                      <Button size="sm" variant="ghost"><ArrowRight className="h-4 w-4" /></Button>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <div className="py-10 text-center text-sm text-muted-foreground">
