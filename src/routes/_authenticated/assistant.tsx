@@ -183,14 +183,31 @@ function AssistantPage() {
               <div><b className="text-foreground">Capítulos:</b> {briefing.capitulos}</div>
               <div><b className="text-foreground">Uso:</b> {briefing.uso}</div>
             </div>
-            <Button
-              className="mt-3 w-full bg-gradient-primary text-primary-foreground shadow-glow"
-              disabled={creating || generateMut.isPending}
-              onClick={() => { setCreating(true); generateMut.mutate(); }}
-            >
-              {generateMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              Gerar Ebook com essas informações
-            </Button>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <Button
+                disabled={generateMut.isPending}
+                onClick={() => { setCreating(true); generateMut.mutate({ withPage: false }); }}
+                className="bg-gradient-primary text-primary-foreground shadow-glow"
+              >
+                {generateMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Gerar Ebook
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={generateMut.isPending}
+                onClick={() => { setCreating(true); generateMut.mutate({ withPage: false, onlyPage: true }); }}
+              >
+                Gerar Página de Vendas
+              </Button>
+              <Button
+                disabled={generateMut.isPending}
+                onClick={() => { setCreating(true); generateMut.mutate({ withPage: true }); }}
+                className="bg-gradient-primary text-primary-foreground shadow-glow"
+              >
+                Ebook + Página
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">"Ebook + Página": ao terminar o ebook, abra a tela dele e clique em "Gerar Página de Vendas".</p>
           </div>
         )}
 
