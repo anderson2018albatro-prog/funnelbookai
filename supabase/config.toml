@@ -1,1 +1,7 @@
 project_id = "ggxuemuasudnlyhhxkbu"
+
+[functions.generate-ebook]
+verify_jwt = true
+
+[functions.generate-sales-page]
+verify_jwt = true
