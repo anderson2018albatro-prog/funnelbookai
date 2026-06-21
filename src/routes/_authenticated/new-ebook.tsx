@@ -24,9 +24,13 @@ function NewEbook() {
     problema: "",
     idioma: "Português",
     tom_voz: "Profissional e acessível",
-    capitulos: 10,
+    tamanho: "medio" as "curto" | "medio" | "completo" | "custom",
+    paginas: 25,
     uso: "venda",
   });
+
+  const presetPages: Record<string, number> = { curto: 12, medio: 25, completo: 45 };
+  const effectivePages = form.tamanho === "custom" ? form.paginas : presetPages[form.tamanho];
 
   const mut = useMutation({
     mutationFn: async () => {
