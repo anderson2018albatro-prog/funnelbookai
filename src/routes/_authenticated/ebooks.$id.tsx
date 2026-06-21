@@ -205,19 +205,23 @@ function EbookDetail() {
     doc.setTextColor(0);
     newPage();
 
-    if (c.summary?.length) {
+    const summary = asArray(c.summary);
+    const chapters = Array.isArray(c.chapters) ? c.chapters : [];
+    const bonus = asArray(c.bonus);
+
+    if (summary.length) {
       writeHeading("Sumário", 22);
-      c.summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
+      summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
       newPage();
     }
     if (c.introduction) {
       writeHeading("Introdução", 20);
       writeBody(c.introduction);
     }
-    (c.chapters ?? []).forEach((ch, i) => {
+    chapters.forEach((ch: any, i: number) => {
       newPage();
-      writeHeading(`Capítulo ${i + 1}: ${ch.title}`, 20);
-      writeBody(ch.content);
+      writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
+      writeBody(String(ch?.content ?? ""));
     });
     if (c.conclusion) {
       newPage();
@@ -229,10 +233,10 @@ function EbookDetail() {
       writeHeading("Próximos passos", 18);
       writeBody(c.call_to_action);
     }
-    if (c.bonus?.length) {
+    if (bonus.length) {
       newPage();
       writeHeading("Bônus", 20);
-      c.bonus.forEach((b) => writeBody(`• ${b}`));
+      bonus.forEach((b) => writeBody(`• ${b}`));
     }
 
     const total = doc.getNumberOfPages();
