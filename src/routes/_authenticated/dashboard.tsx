@@ -42,6 +42,7 @@ function Dashboard() {
     { label: "Créditos restantes", value: stats?.credits ?? 0, icon: Sparkles },
     { label: "Ebooks criados", value: stats?.ebooks ?? 0, icon: BookOpen },
     { label: "Páginas de venda", value: stats?.pages ?? 0, icon: Megaphone },
+    { label: "Presells criadas", value: stats?.presells ?? 0, icon: Link2 },
   ];
 
   return (
@@ -50,12 +51,14 @@ function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-2xl font-bold">Bem-vindo de volta 👋</h2>
-            <p className="text-sm text-muted-foreground">Gere ebooks e páginas de vendas com IA.</p>
+            <p className="text-sm text-muted-foreground">Gere ebooks, páginas de vendas e presells com IA.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/debug"><Button variant="outline">🔧 Diagnóstico</Button></Link>
-            <Link to="/assistant"><Button variant="outline"><Bot className="mr-2 h-4 w-4" /> Assistente IA</Button></Link>
-            <Link to="/new-ebook"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
+            <Link to="/debug"><Button variant="outline" size="sm">🔧 Diagnóstico</Button></Link>
+            <Link to="/assistant"><Button variant="outline" size="sm"><Bot className="mr-2 h-4 w-4" /> Assistente IA</Button></Link>
+            <Link to="/new-ebook"><Button variant="outline" size="sm"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
+            <Link to="/sales-pages/new"><Button variant="outline" size="sm"><Wand2 className="mr-2 h-4 w-4" /> Nova Página com IA</Button></Link>
+            <Link to="/presells/new"><Button className="bg-gradient-primary text-primary-foreground shadow-glow" size="sm"><Link2 className="mr-2 h-4 w-4" /> Nova Presell</Button></Link>
           </div>
         </div>
 
