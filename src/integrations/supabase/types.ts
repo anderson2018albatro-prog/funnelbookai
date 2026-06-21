@@ -18,8 +18,10 @@ export type Database = {
         Row: {
           content: Json
           created_at: string
+          error_message: string | null
           id: string
           niche: string | null
+          status: string
           title: string
           updated_at: string
           user_id: string
@@ -27,8 +29,10 @@ export type Database = {
         Insert: {
           content?: Json
           created_at?: string
+          error_message?: string | null
           id?: string
           niche?: string | null
+          status?: string
           title: string
           updated_at?: string
           user_id: string
@@ -36,8 +40,10 @@ export type Database = {
         Update: {
           content?: Json
           created_at?: string
+          error_message?: string | null
           id?: string
           niche?: string | null
+          status?: string
           title?: string
           updated_at?: string
           user_id?: string
@@ -75,10 +81,12 @@ export type Database = {
         Row: {
           created_at: string
           ebook_id: string
+          error_message: string | null
           html_content: string
           id: string
           is_published: boolean
           slug: string
+          status: string
           title: string
           updated_at: string
           user_id: string
@@ -86,10 +94,12 @@ export type Database = {
         Insert: {
           created_at?: string
           ebook_id: string
+          error_message?: string | null
           html_content?: string
           id?: string
           is_published?: boolean
           slug: string
+          status?: string
           title: string
           updated_at?: string
           user_id: string
@@ -97,10 +107,12 @@ export type Database = {
         Update: {
           created_at?: string
           ebook_id?: string
+          error_message?: string | null
           html_content?: string
           id?: string
           is_published?: boolean
           slug?: string
+          status?: string
           title?: string
           updated_at?: string
           user_id?: string
