@@ -37,7 +37,11 @@ function NewEbook() {
       if (!form.tema || !form.publico_alvo) throw new Error("Preencha tema e público-alvo.");
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) throw new Error("Sessão expirada. Faça login novamente.");
-      const { data, error } = await supabase.functions.invoke("generate-ebook", { body: form });
+      const payload = {
+        ...form,
+        paginas: effectivePages,
+      };
+      const { data, error } = await supabase.functions.invoke("generate-ebook", { body: payload });
       if (error) {
         let msg = error.message;
         try {
