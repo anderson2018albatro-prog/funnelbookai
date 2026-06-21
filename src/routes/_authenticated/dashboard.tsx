@@ -14,12 +14,13 @@ function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [e, s, c] = await Promise.all([
+      const [e, s, pr, c] = await Promise.all([
         supabase.from("ebooks").select("id", { count: "exact", head: true }),
         supabase.from("sales_pages").select("id", { count: "exact", head: true }),
+        supabase.from("presells").select("id", { count: "exact", head: true }),
         supabase.from("user_credits").select("credits").maybeSingle(),
       ]);
-      return { ebooks: e.count ?? 0, pages: s.count ?? 0, credits: c.data?.credits ?? 0 };
+      return { ebooks: e.count ?? 0, pages: s.count ?? 0, presells: pr.count ?? 0, credits: c.data?.credits ?? 0 };
     },
     refetchInterval: 5000,
   });
