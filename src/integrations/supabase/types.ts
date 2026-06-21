@@ -77,6 +77,63 @@ export type Database = {
         }
         Relationships: []
       }
+      presells: {
+        Row: {
+          affiliate_url: string
+          blocks: Json | null
+          created_at: string
+          error_message: string | null
+          html_content: string | null
+          id: string
+          is_published: boolean
+          language: string | null
+          presell_type: string
+          slug: string
+          source_url: string | null
+          status: string
+          title: string
+          tone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          affiliate_url?: string
+          blocks?: Json | null
+          created_at?: string
+          error_message?: string | null
+          html_content?: string | null
+          id?: string
+          is_published?: boolean
+          language?: string | null
+          presell_type?: string
+          slug: string
+          source_url?: string | null
+          status?: string
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          affiliate_url?: string
+          blocks?: Json | null
+          created_at?: string
+          error_message?: string | null
+          html_content?: string | null
+          id?: string
+          is_published?: boolean
+          language?: string | null
+          presell_type?: string
+          slug?: string
+          source_url?: string | null
+          status?: string
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
