@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.generate-sales-page]
 verify_jwt = true
+
+[functions.assistant-chat]
+verify_jwt = true
