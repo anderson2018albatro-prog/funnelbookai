@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Plus, BookOpen, Megaphone, User, Sparkles, Bot } from "lucide-react";
+import { LayoutDashboard, Plus, BookOpen, Megaphone, User, Sparkles, Bot, Link2 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
@@ -11,6 +11,7 @@ const items = [
   { title: "Gerar Ebook", url: "/new-ebook", icon: Plus },
   { title: "Meus Ebooks", url: "/ebooks", icon: BookOpen },
   { title: "Páginas de Venda", url: "/sales-pages", icon: Megaphone },
+  { title: "Presells", url: "/presells", icon: Link2 },
   { title: "Perfil", url: "/profile", icon: User },
 ];
 

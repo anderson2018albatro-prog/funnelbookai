@@ -77,6 +77,63 @@ export type Database = {
         }
         Relationships: []
       }
+      presells: {
+        Row: {
+          affiliate_url: string
+          blocks: Json | null
+          created_at: string
+          error_message: string | null
+          html_content: string | null
+          id: string
+          is_published: boolean
+          language: string | null
+          presell_type: string
+          slug: string
+          source_url: string | null
+          status: string
+          title: string
+          tone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          affiliate_url?: string
+          blocks?: Json | null
+          created_at?: string
+          error_message?: string | null
+          html_content?: string | null
+          id?: string
+          is_published?: boolean
+          language?: string | null
+          presell_type?: string
+          slug: string
+          source_url?: string | null
+          status?: string
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          affiliate_url?: string
+          blocks?: Json | null
+          created_at?: string
+          error_message?: string | null
+          html_content?: string | null
+          id?: string
+          is_published?: boolean
+          language?: string | null
+          presell_type?: string
+          slug?: string
+          source_url?: string | null
+          status?: string
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -108,7 +165,7 @@ export type Database = {
         Row: {
           blocks: Json | null
           created_at: string
-          ebook_id: string
+          ebook_id: string | null
           error_message: string | null
           html_content: string
           id: string
@@ -124,7 +181,7 @@ export type Database = {
         Insert: {
           blocks?: Json | null
           created_at?: string
-          ebook_id: string
+          ebook_id?: string | null
           error_message?: string | null
           html_content?: string
           id?: string
@@ -140,7 +197,7 @@ export type Database = {
         Update: {
           blocks?: Json | null
           created_at?: string
-          ebook_id?: string
+          ebook_id?: string | null
           error_message?: string | null
           html_content?: string
           id?: string

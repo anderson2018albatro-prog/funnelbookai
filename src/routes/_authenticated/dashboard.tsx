@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy, Pencil } from "lucide-react";
+import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy, Pencil, Link2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -14,12 +14,13 @@ function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [e, s, c] = await Promise.all([
+      const [e, s, pr, c] = await Promise.all([
         supabase.from("ebooks").select("id", { count: "exact", head: true }),
         supabase.from("sales_pages").select("id", { count: "exact", head: true }),
+        supabase.from("presells").select("id", { count: "exact", head: true }),
         supabase.from("user_credits").select("credits").maybeSingle(),
       ]);
-      return { ebooks: e.count ?? 0, pages: s.count ?? 0, credits: c.data?.credits ?? 0 };
+      return { ebooks: e.count ?? 0, pages: s.count ?? 0, presells: pr.count ?? 0, credits: c.data?.credits ?? 0 };
     },
     refetchInterval: 5000,
   });
@@ -41,6 +42,7 @@ function Dashboard() {
     { label: "Créditos restantes", value: stats?.credits ?? 0, icon: Sparkles },
     { label: "Ebooks criados", value: stats?.ebooks ?? 0, icon: BookOpen },
     { label: "Páginas de venda", value: stats?.pages ?? 0, icon: Megaphone },
+    { label: "Presells criadas", value: stats?.presells ?? 0, icon: Link2 },
   ];
 
   return (
@@ -49,16 +51,18 @@ function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-2xl font-bold">Bem-vindo de volta 👋</h2>
-            <p className="text-sm text-muted-foreground">Gere ebooks e páginas de vendas com IA.</p>
+            <p className="text-sm text-muted-foreground">Gere ebooks, páginas de vendas e presells com IA.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/debug"><Button variant="outline">🔧 Diagnóstico</Button></Link>
-            <Link to="/assistant"><Button variant="outline"><Bot className="mr-2 h-4 w-4" /> Assistente IA</Button></Link>
-            <Link to="/new-ebook"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
+            <Link to="/debug"><Button variant="outline" size="sm">🔧 Diagnóstico</Button></Link>
+            <Link to="/assistant"><Button variant="outline" size="sm"><Bot className="mr-2 h-4 w-4" /> Assistente IA</Button></Link>
+            <Link to="/new-ebook"><Button variant="outline" size="sm"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
+            <Link to="/sales-pages/new"><Button variant="outline" size="sm"><Wand2 className="mr-2 h-4 w-4" /> Nova Página com IA</Button></Link>
+            <Link to="/presells/new"><Button className="bg-gradient-primary text-primary-foreground shadow-glow" size="sm"><Link2 className="mr-2 h-4 w-4" /> Nova Presell</Button></Link>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {cards.map((c) => (
             <div key={c.label} className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
               <div className="flex items-center justify-between">

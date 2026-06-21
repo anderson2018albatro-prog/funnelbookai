@@ -13,18 +13,24 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PreSlugRouteImport } from './routes/pre.$slug'
 import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as AuthenticatedSalesPagesRouteImport } from './routes/_authenticated/sales-pages'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedPresellsRouteImport } from './routes/_authenticated/presells'
 import { Route as AuthenticatedNewEbookRouteImport } from './routes/_authenticated/new-ebook'
 import { Route as AuthenticatedEbooksRouteImport } from './routes/_authenticated/ebooks'
 import { Route as AuthenticatedDebugRouteImport } from './routes/_authenticated/debug'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedSalesPagesIndexRouteImport } from './routes/_authenticated/sales-pages.index'
+import { Route as AuthenticatedPresellsIndexRouteImport } from './routes/_authenticated/presells.index'
 import { Route as AuthenticatedEbooksIndexRouteImport } from './routes/_authenticated/ebooks.index'
+import { Route as AuthenticatedSalesPagesNewRouteImport } from './routes/_authenticated/sales-pages.new'
+import { Route as AuthenticatedPresellsNewRouteImport } from './routes/_authenticated/presells.new'
 import { Route as AuthenticatedEbooksIdRouteImport } from './routes/_authenticated/ebooks.$id'
 import { Route as AuthenticatedSalesPagesIdEditRouteImport } from './routes/_authenticated/sales-pages.$id.edit'
+import { Route as AuthenticatedPresellsIdEditRouteImport } from './routes/_authenticated/presells.$id.edit'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -45,6 +51,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PreSlugRoute = PreSlugRouteImport.update({
+  id: '/pre/$slug',
+  path: '/pre/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PSlugRoute = PSlugRouteImport.update({
   id: '/p/$slug',
   path: '/p/$slug',
@@ -58,6 +69,11 @@ const AuthenticatedSalesPagesRoute = AuthenticatedSalesPagesRouteImport.update({
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPresellsRoute = AuthenticatedPresellsRouteImport.update({
+  id: '/presells',
+  path: '/presells',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedNewEbookRoute = AuthenticatedNewEbookRouteImport.update({
@@ -91,11 +107,29 @@ const AuthenticatedSalesPagesIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSalesPagesRoute,
   } as any)
+const AuthenticatedPresellsIndexRoute =
+  AuthenticatedPresellsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedPresellsRoute,
+  } as any)
 const AuthenticatedEbooksIndexRoute =
   AuthenticatedEbooksIndexRouteImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedEbooksRoute,
+  } as any)
+const AuthenticatedSalesPagesNewRoute =
+  AuthenticatedSalesPagesNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedSalesPagesRoute,
+  } as any)
+const AuthenticatedPresellsNewRoute =
+  AuthenticatedPresellsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedPresellsRoute,
   } as any)
 const AuthenticatedEbooksIdRoute = AuthenticatedEbooksIdRouteImport.update({
   id: '/$id',
@@ -108,6 +142,12 @@ const AuthenticatedSalesPagesIdEditRoute =
     path: '/$id/edit',
     getParentRoute: () => AuthenticatedSalesPagesRoute,
   } as any)
+const AuthenticatedPresellsIdEditRoute =
+  AuthenticatedPresellsIdEditRouteImport.update({
+    id: '/$id/edit',
+    path: '/$id/edit',
+    getParentRoute: () => AuthenticatedPresellsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -118,12 +158,18 @@ export interface FileRoutesByFullPath {
   '/debug': typeof AuthenticatedDebugRoute
   '/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/new-ebook': typeof AuthenticatedNewEbookRoute
+  '/presells': typeof AuthenticatedPresellsRouteWithChildren
   '/profile': typeof AuthenticatedProfileRoute
   '/sales-pages': typeof AuthenticatedSalesPagesRouteWithChildren
   '/p/$slug': typeof PSlugRoute
+  '/pre/$slug': typeof PreSlugRoute
   '/ebooks/$id': typeof AuthenticatedEbooksIdRoute
+  '/presells/new': typeof AuthenticatedPresellsNewRoute
+  '/sales-pages/new': typeof AuthenticatedSalesPagesNewRoute
   '/ebooks/': typeof AuthenticatedEbooksIndexRoute
+  '/presells/': typeof AuthenticatedPresellsIndexRoute
   '/sales-pages/': typeof AuthenticatedSalesPagesIndexRoute
+  '/presells/$id/edit': typeof AuthenticatedPresellsIdEditRoute
   '/sales-pages/$id/edit': typeof AuthenticatedSalesPagesIdEditRoute
 }
 export interface FileRoutesByTo {
@@ -136,9 +182,14 @@ export interface FileRoutesByTo {
   '/new-ebook': typeof AuthenticatedNewEbookRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/p/$slug': typeof PSlugRoute
+  '/pre/$slug': typeof PreSlugRoute
   '/ebooks/$id': typeof AuthenticatedEbooksIdRoute
+  '/presells/new': typeof AuthenticatedPresellsNewRoute
+  '/sales-pages/new': typeof AuthenticatedSalesPagesNewRoute
   '/ebooks': typeof AuthenticatedEbooksIndexRoute
+  '/presells': typeof AuthenticatedPresellsIndexRoute
   '/sales-pages': typeof AuthenticatedSalesPagesIndexRoute
+  '/presells/$id/edit': typeof AuthenticatedPresellsIdEditRoute
   '/sales-pages/$id/edit': typeof AuthenticatedSalesPagesIdEditRoute
 }
 export interface FileRoutesById {
@@ -152,12 +203,18 @@ export interface FileRoutesById {
   '/_authenticated/debug': typeof AuthenticatedDebugRoute
   '/_authenticated/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/_authenticated/new-ebook': typeof AuthenticatedNewEbookRoute
+  '/_authenticated/presells': typeof AuthenticatedPresellsRouteWithChildren
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/sales-pages': typeof AuthenticatedSalesPagesRouteWithChildren
   '/p/$slug': typeof PSlugRoute
+  '/pre/$slug': typeof PreSlugRoute
   '/_authenticated/ebooks/$id': typeof AuthenticatedEbooksIdRoute
+  '/_authenticated/presells/new': typeof AuthenticatedPresellsNewRoute
+  '/_authenticated/sales-pages/new': typeof AuthenticatedSalesPagesNewRoute
   '/_authenticated/ebooks/': typeof AuthenticatedEbooksIndexRoute
+  '/_authenticated/presells/': typeof AuthenticatedPresellsIndexRoute
   '/_authenticated/sales-pages/': typeof AuthenticatedSalesPagesIndexRoute
+  '/_authenticated/presells/$id/edit': typeof AuthenticatedPresellsIdEditRoute
   '/_authenticated/sales-pages/$id/edit': typeof AuthenticatedSalesPagesIdEditRoute
 }
 export interface FileRouteTypes {
@@ -171,12 +228,18 @@ export interface FileRouteTypes {
     | '/debug'
     | '/ebooks'
     | '/new-ebook'
+    | '/presells'
     | '/profile'
     | '/sales-pages'
     | '/p/$slug'
+    | '/pre/$slug'
     | '/ebooks/$id'
+    | '/presells/new'
+    | '/sales-pages/new'
     | '/ebooks/'
+    | '/presells/'
     | '/sales-pages/'
+    | '/presells/$id/edit'
     | '/sales-pages/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -189,9 +252,14 @@ export interface FileRouteTypes {
     | '/new-ebook'
     | '/profile'
     | '/p/$slug'
+    | '/pre/$slug'
     | '/ebooks/$id'
+    | '/presells/new'
+    | '/sales-pages/new'
     | '/ebooks'
+    | '/presells'
     | '/sales-pages'
+    | '/presells/$id/edit'
     | '/sales-pages/$id/edit'
   id:
     | '__root__'
@@ -204,12 +272,18 @@ export interface FileRouteTypes {
     | '/_authenticated/debug'
     | '/_authenticated/ebooks'
     | '/_authenticated/new-ebook'
+    | '/_authenticated/presells'
     | '/_authenticated/profile'
     | '/_authenticated/sales-pages'
     | '/p/$slug'
+    | '/pre/$slug'
     | '/_authenticated/ebooks/$id'
+    | '/_authenticated/presells/new'
+    | '/_authenticated/sales-pages/new'
     | '/_authenticated/ebooks/'
+    | '/_authenticated/presells/'
     | '/_authenticated/sales-pages/'
+    | '/_authenticated/presells/$id/edit'
     | '/_authenticated/sales-pages/$id/edit'
   fileRoutesById: FileRoutesById
 }
@@ -219,6 +293,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   PSlugRoute: typeof PSlugRoute
+  PreSlugRoute: typeof PreSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -251,6 +326,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pre/$slug': {
+      id: '/pre/$slug'
+      path: '/pre/$slug'
+      fullPath: '/pre/$slug'
+      preLoaderRoute: typeof PreSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/p/$slug': {
       id: '/p/$slug'
       path: '/p/$slug'
@@ -270,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/presells': {
+      id: '/_authenticated/presells'
+      path: '/presells'
+      fullPath: '/presells'
+      preLoaderRoute: typeof AuthenticatedPresellsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/new-ebook': {
@@ -314,12 +403,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSalesPagesIndexRouteImport
       parentRoute: typeof AuthenticatedSalesPagesRoute
     }
+    '/_authenticated/presells/': {
+      id: '/_authenticated/presells/'
+      path: '/'
+      fullPath: '/presells/'
+      preLoaderRoute: typeof AuthenticatedPresellsIndexRouteImport
+      parentRoute: typeof AuthenticatedPresellsRoute
+    }
     '/_authenticated/ebooks/': {
       id: '/_authenticated/ebooks/'
       path: '/'
       fullPath: '/ebooks/'
       preLoaderRoute: typeof AuthenticatedEbooksIndexRouteImport
       parentRoute: typeof AuthenticatedEbooksRoute
+    }
+    '/_authenticated/sales-pages/new': {
+      id: '/_authenticated/sales-pages/new'
+      path: '/new'
+      fullPath: '/sales-pages/new'
+      preLoaderRoute: typeof AuthenticatedSalesPagesNewRouteImport
+      parentRoute: typeof AuthenticatedSalesPagesRoute
+    }
+    '/_authenticated/presells/new': {
+      id: '/_authenticated/presells/new'
+      path: '/new'
+      fullPath: '/presells/new'
+      preLoaderRoute: typeof AuthenticatedPresellsNewRouteImport
+      parentRoute: typeof AuthenticatedPresellsRoute
     }
     '/_authenticated/ebooks/$id': {
       id: '/_authenticated/ebooks/$id'
@@ -334,6 +444,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sales-pages/$id/edit'
       preLoaderRoute: typeof AuthenticatedSalesPagesIdEditRouteImport
       parentRoute: typeof AuthenticatedSalesPagesRoute
+    }
+    '/_authenticated/presells/$id/edit': {
+      id: '/_authenticated/presells/$id/edit'
+      path: '/$id/edit'
+      fullPath: '/presells/$id/edit'
+      preLoaderRoute: typeof AuthenticatedPresellsIdEditRouteImport
+      parentRoute: typeof AuthenticatedPresellsRoute
     }
   }
 }
@@ -351,13 +468,32 @@ const AuthenticatedEbooksRouteChildren: AuthenticatedEbooksRouteChildren = {
 const AuthenticatedEbooksRouteWithChildren =
   AuthenticatedEbooksRoute._addFileChildren(AuthenticatedEbooksRouteChildren)
 
+interface AuthenticatedPresellsRouteChildren {
+  AuthenticatedPresellsNewRoute: typeof AuthenticatedPresellsNewRoute
+  AuthenticatedPresellsIndexRoute: typeof AuthenticatedPresellsIndexRoute
+  AuthenticatedPresellsIdEditRoute: typeof AuthenticatedPresellsIdEditRoute
+}
+
+const AuthenticatedPresellsRouteChildren: AuthenticatedPresellsRouteChildren = {
+  AuthenticatedPresellsNewRoute: AuthenticatedPresellsNewRoute,
+  AuthenticatedPresellsIndexRoute: AuthenticatedPresellsIndexRoute,
+  AuthenticatedPresellsIdEditRoute: AuthenticatedPresellsIdEditRoute,
+}
+
+const AuthenticatedPresellsRouteWithChildren =
+  AuthenticatedPresellsRoute._addFileChildren(
+    AuthenticatedPresellsRouteChildren,
+  )
+
 interface AuthenticatedSalesPagesRouteChildren {
+  AuthenticatedSalesPagesNewRoute: typeof AuthenticatedSalesPagesNewRoute
   AuthenticatedSalesPagesIndexRoute: typeof AuthenticatedSalesPagesIndexRoute
   AuthenticatedSalesPagesIdEditRoute: typeof AuthenticatedSalesPagesIdEditRoute
 }
 
 const AuthenticatedSalesPagesRouteChildren: AuthenticatedSalesPagesRouteChildren =
   {
+    AuthenticatedSalesPagesNewRoute: AuthenticatedSalesPagesNewRoute,
     AuthenticatedSalesPagesIndexRoute: AuthenticatedSalesPagesIndexRoute,
     AuthenticatedSalesPagesIdEditRoute: AuthenticatedSalesPagesIdEditRoute,
   }
@@ -373,6 +509,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDebugRoute: typeof AuthenticatedDebugRoute
   AuthenticatedEbooksRoute: typeof AuthenticatedEbooksRouteWithChildren
   AuthenticatedNewEbookRoute: typeof AuthenticatedNewEbookRoute
+  AuthenticatedPresellsRoute: typeof AuthenticatedPresellsRouteWithChildren
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSalesPagesRoute: typeof AuthenticatedSalesPagesRouteWithChildren
 }
@@ -383,6 +520,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDebugRoute: AuthenticatedDebugRoute,
   AuthenticatedEbooksRoute: AuthenticatedEbooksRouteWithChildren,
   AuthenticatedNewEbookRoute: AuthenticatedNewEbookRoute,
+  AuthenticatedPresellsRoute: AuthenticatedPresellsRouteWithChildren,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSalesPagesRoute: AuthenticatedSalesPagesRouteWithChildren,
 }
@@ -396,6 +534,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   PSlugRoute: PSlugRoute,
+  PreSlugRoute: PreSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
