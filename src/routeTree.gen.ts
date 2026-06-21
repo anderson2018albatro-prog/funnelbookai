@@ -21,6 +21,7 @@ import { Route as AuthenticatedEbooksRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedEbooksIdRouteImport } from './routes/_authenticated/ebooks.$id'
+import { Route as AuthenticatedSalesPagesIdEditRouteImport } from './routes/_authenticated/sales-pages.$id.edit'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -81,6 +82,12 @@ const AuthenticatedEbooksIdRoute = AuthenticatedEbooksIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AuthenticatedEbooksRoute,
 } as any)
+const AuthenticatedSalesPagesIdEditRoute =
+  AuthenticatedSalesPagesIdEditRouteImport.update({
+    id: '/$id/edit',
+    path: '/$id/edit',
+    getParentRoute: () => AuthenticatedSalesPagesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -91,9 +98,10 @@ export interface FileRoutesByFullPath {
   '/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/new-ebook': typeof AuthenticatedNewEbookRoute
   '/profile': typeof AuthenticatedProfileRoute
-  '/sales-pages': typeof AuthenticatedSalesPagesRoute
+  '/sales-pages': typeof AuthenticatedSalesPagesRouteWithChildren
   '/p/$slug': typeof PSlugRoute
   '/ebooks/$id': typeof AuthenticatedEbooksIdRoute
+  '/sales-pages/$id/edit': typeof AuthenticatedSalesPagesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -104,9 +112,10 @@ export interface FileRoutesByTo {
   '/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/new-ebook': typeof AuthenticatedNewEbookRoute
   '/profile': typeof AuthenticatedProfileRoute
-  '/sales-pages': typeof AuthenticatedSalesPagesRoute
+  '/sales-pages': typeof AuthenticatedSalesPagesRouteWithChildren
   '/p/$slug': typeof PSlugRoute
   '/ebooks/$id': typeof AuthenticatedEbooksIdRoute
+  '/sales-pages/$id/edit': typeof AuthenticatedSalesPagesIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -119,9 +128,10 @@ export interface FileRoutesById {
   '/_authenticated/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/_authenticated/new-ebook': typeof AuthenticatedNewEbookRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
-  '/_authenticated/sales-pages': typeof AuthenticatedSalesPagesRoute
+  '/_authenticated/sales-pages': typeof AuthenticatedSalesPagesRouteWithChildren
   '/p/$slug': typeof PSlugRoute
   '/_authenticated/ebooks/$id': typeof AuthenticatedEbooksIdRoute
+  '/_authenticated/sales-pages/$id/edit': typeof AuthenticatedSalesPagesIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/sales-pages'
     | '/p/$slug'
     | '/ebooks/$id'
+    | '/sales-pages/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/sales-pages'
     | '/p/$slug'
     | '/ebooks/$id'
+    | '/sales-pages/$id/edit'
   id:
     | '__root__'
     | '/'
@@ -164,6 +176,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sales-pages'
     | '/p/$slug'
     | '/_authenticated/ebooks/$id'
+    | '/_authenticated/sales-pages/$id/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -260,6 +273,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEbooksIdRouteImport
       parentRoute: typeof AuthenticatedEbooksRoute
     }
+    '/_authenticated/sales-pages/$id/edit': {
+      id: '/_authenticated/sales-pages/$id/edit'
+      path: '/$id/edit'
+      fullPath: '/sales-pages/$id/edit'
+      preLoaderRoute: typeof AuthenticatedSalesPagesIdEditRouteImport
+      parentRoute: typeof AuthenticatedSalesPagesRoute
+    }
   }
 }
 
@@ -274,13 +294,27 @@ const AuthenticatedEbooksRouteChildren: AuthenticatedEbooksRouteChildren = {
 const AuthenticatedEbooksRouteWithChildren =
   AuthenticatedEbooksRoute._addFileChildren(AuthenticatedEbooksRouteChildren)
 
+interface AuthenticatedSalesPagesRouteChildren {
+  AuthenticatedSalesPagesIdEditRoute: typeof AuthenticatedSalesPagesIdEditRoute
+}
+
+const AuthenticatedSalesPagesRouteChildren: AuthenticatedSalesPagesRouteChildren =
+  {
+    AuthenticatedSalesPagesIdEditRoute: AuthenticatedSalesPagesIdEditRoute,
+  }
+
+const AuthenticatedSalesPagesRouteWithChildren =
+  AuthenticatedSalesPagesRoute._addFileChildren(
+    AuthenticatedSalesPagesRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEbooksRoute: typeof AuthenticatedEbooksRouteWithChildren
   AuthenticatedNewEbookRoute: typeof AuthenticatedNewEbookRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
-  AuthenticatedSalesPagesRoute: typeof AuthenticatedSalesPagesRoute
+  AuthenticatedSalesPagesRoute: typeof AuthenticatedSalesPagesRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -289,7 +323,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEbooksRoute: AuthenticatedEbooksRouteWithChildren,
   AuthenticatedNewEbookRoute: AuthenticatedNewEbookRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
-  AuthenticatedSalesPagesRoute: AuthenticatedSalesPagesRoute,
+  AuthenticatedSalesPagesRoute: AuthenticatedSalesPagesRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
