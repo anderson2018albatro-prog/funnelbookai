@@ -51,7 +51,8 @@ function Dashboard() {
             <h2 className="font-display text-2xl font-bold">Bem-vindo de volta 👋</h2>
             <p className="text-sm text-muted-foreground">Gere ebooks e páginas de vendas com IA.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Link to="/debug"><Button variant="outline">🔧 Diagnóstico</Button></Link>
             <Link to="/assistant"><Button variant="outline"><Bot className="mr-2 h-4 w-4" /> Assistente IA</Button></Link>
             <Link to="/new-ebook"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
           </div>
