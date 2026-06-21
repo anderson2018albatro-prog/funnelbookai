@@ -143,9 +143,15 @@ function EditPage() {
     <DashboardShell title={`Editor — ${page.title}`}>
       <div className="mx-auto max-w-7xl">
         <div className="mb-4 flex items-center gap-2">
-          <Link to="/ebooks/$id" params={{ id: page.ebook_id }}>
-            <Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao ebook</Button>
-          </Link>
+          {page.ebook_id ? (
+            <Link to="/ebooks/$id" params={{ id: page.ebook_id }}>
+              <Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao ebook</Button>
+            </Link>
+          ) : (
+            <Link to="/sales-pages">
+              <Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
+            </Link>
+          )}
           <a href={`/p/${page.slug}`} target="_blank" rel="noopener" className="ml-auto">
             <Button variant="outline" size="sm"><ExternalLink className="mr-2 h-4 w-4" /> Ver página pública</Button>
           </a>
