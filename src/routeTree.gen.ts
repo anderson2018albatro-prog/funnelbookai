@@ -19,6 +19,7 @@ import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedNewEbookRouteImport } from './routes/_authenticated/new-ebook'
 import { Route as AuthenticatedEbooksRouteImport } from './routes/_authenticated/ebooks'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedEbooksIdRouteImport } from './routes/_authenticated/ebooks.$id'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -70,6 +71,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAssistantRoute = AuthenticatedAssistantRouteImport.update({
+  id: '/assistant',
+  path: '/assistant',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedEbooksIdRoute = AuthenticatedEbooksIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/assistant': typeof AuthenticatedAssistantRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/new-ebook': typeof AuthenticatedNewEbookRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/assistant': typeof AuthenticatedAssistantRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/new-ebook': typeof AuthenticatedNewEbookRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/assistant': typeof AuthenticatedAssistantRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/ebooks': typeof AuthenticatedEbooksRouteWithChildren
   '/_authenticated/new-ebook': typeof AuthenticatedNewEbookRoute
@@ -120,6 +129,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/assistant'
     | '/dashboard'
     | '/ebooks'
     | '/new-ebook'
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/assistant'
     | '/dashboard'
     | '/ebooks'
     | '/new-ebook'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/reset-password'
+    | '/_authenticated/assistant'
     | '/_authenticated/dashboard'
     | '/_authenticated/ebooks'
     | '/_authenticated/new-ebook'
@@ -234,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/assistant': {
+      id: '/_authenticated/assistant'
+      path: '/assistant'
+      fullPath: '/assistant'
+      preLoaderRoute: typeof AuthenticatedAssistantRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/ebooks/$id': {
       id: '/_authenticated/ebooks/$id'
       path: '/$id'
@@ -256,6 +275,7 @@ const AuthenticatedEbooksRouteWithChildren =
   AuthenticatedEbooksRoute._addFileChildren(AuthenticatedEbooksRouteChildren)
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEbooksRoute: typeof AuthenticatedEbooksRouteWithChildren
   AuthenticatedNewEbookRoute: typeof AuthenticatedNewEbookRoute
@@ -264,6 +284,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAssistantRoute: AuthenticatedAssistantRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEbooksRoute: AuthenticatedEbooksRouteWithChildren,
   AuthenticatedNewEbookRoute: AuthenticatedNewEbookRoute,

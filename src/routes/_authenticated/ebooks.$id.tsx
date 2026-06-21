@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
-import { Copy, ExternalLink, Loader2, Megaphone, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Copy, ExternalLink, Loader2, Megaphone, Save, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/ebooks/$id")({
   component: EbookDetail,
@@ -16,11 +16,13 @@ export const Route = createFileRoute("/_authenticated/ebooks/$id")({
 type EbookContent = {
   title?: string;
   subtitle?: string;
-  description?: string;
+  introduction?: string;
   summary?: string[];
   chapters?: { title: string; content: string }[];
   conclusion?: string;
-  bonus?: string;
+  call_to_action?: string;
+  bonus?: string[];
+  briefing?: any;
 };
 
 function EbookDetail() {
@@ -36,12 +38,21 @@ function EbookDetail() {
       if (error) throw error;
       return data;
     },
+    refetchInterval: (q) => {
+      const s = (q.state.data as any)?.status;
+      return s === "processing" ? 3000 : false;
+    },
   });
+
   const salesQ = useQuery({
     queryKey: ["ebook-sales", id],
     queryFn: async () => {
       const { data } = await supabase.from("sales_pages").select("*").eq("ebook_id", id).maybeSingle();
       return data;
+    },
+    refetchInterval: (q) => {
+      const s = (q.state.data as any)?.status;
+      return s === "processing" ? 3000 : false;
     },
   });
 
@@ -52,12 +63,15 @@ function EbookDetail() {
       setTitle(ebookQ.data.title);
       setContentText(JSON.stringify(ebookQ.data.content, null, 2));
     }
-  }, [ebookQ.data]);
+  }, [ebookQ.data?.id, ebookQ.data?.status]);
 
-  if (ebookQ.isLoading) return <DashboardShell title="Ebook"><div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></DashboardShell>;
-  if (!ebookQ.data) return <DashboardShell title="Ebook"><div className="p-8 text-center">Não encontrado</div></DashboardShell>;
+  if (ebookQ.isLoading)
+    return (<DashboardShell title="Ebook"><div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></DashboardShell>);
+  if (!ebookQ.data)
+    return (<DashboardShell title="Ebook"><div className="p-8 text-center">Não encontrado</div></DashboardShell>);
 
   const ebook = ebookQ.data;
+  const status = (ebook as any).status as string;
   const c = (ebook.content ?? {}) as EbookContent;
 
   async function save() {
@@ -87,9 +101,16 @@ function EbookDetail() {
     setBusy("sales");
     try {
       const { data, error } = await supabase.functions.invoke("generate-sales-page", { body: { ebookId: id } });
-      if (error) throw error;
+      if (error) {
+        let msg = error.message;
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx?.json) { const b = await ctx.json(); if (b?.error) msg = b.error; }
+        } catch { /* noop */ }
+        throw new Error(msg);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Página de vendas gerada!");
+      toast.success("Geração da página iniciada!");
       qc.invalidateQueries({ queryKey: ["ebook-sales", id] });
     } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   }
@@ -98,28 +119,51 @@ function EbookDetail() {
     const md = [
       `# ${c.title ?? title}`,
       c.subtitle ? `## ${c.subtitle}\n` : "",
-      c.description ? `${c.description}\n` : "",
-      ...(c.chapters ?? []).map((ch) => `\n## ${ch.title}\n\n${ch.content}`),
+      c.introduction ? `\n## Introdução\n\n${c.introduction}` : "",
+      c.summary?.length ? `\n## Sumário\n\n${c.summary.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "",
+      ...(c.chapters ?? []).map((ch, i) => `\n## Capítulo ${i + 1}: ${ch.title}\n\n${ch.content}`),
       c.conclusion ? `\n## Conclusão\n\n${c.conclusion}` : "",
-      c.bonus ? `\n## Bônus\n\n${c.bonus}` : "",
+      c.call_to_action ? `\n## Chamada para Ação\n\n${c.call_to_action}` : "",
+      c.bonus?.length ? `\n## Bônus\n\n${c.bonus.map((b) => `- ${b}`).join("\n")}` : "",
     ].filter(Boolean).join("\n");
     navigator.clipboard.writeText(md);
     toast.success("Conteúdo copiado");
   }
 
   const publicUrl = salesQ.data ? `${window.location.origin}/p/${salesQ.data.slug}` : null;
+  const salesStatus = (salesQ.data as any)?.status;
 
   return (
     <DashboardShell title={ebook.title}>
       <div className="mx-auto max-w-4xl space-y-5">
+        {status === "processing" && (
+          <div className="flex items-center gap-3 rounded-2xl border border-primary/40 bg-gradient-card p-4 shadow-elegant">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div>
+              <div className="font-medium">Gerando seu ebook…</div>
+              <div className="text-xs text-muted-foreground">Isso leva ~30–60 segundos. Você pode sair desta tela; o resultado é salvo automaticamente.</div>
+            </div>
+          </div>
+        )}
+        {status === "failed" && (
+          <div className="flex items-start gap-3 rounded-2xl border border-destructive/50 bg-card p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+            <div className="flex-1">
+              <div className="font-medium text-destructive">Falha na geração</div>
+              <div className="mt-1 text-xs text-muted-foreground">{(ebook as any).error_message ?? "Tente novamente."}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Seu crédito foi devolvido. Você pode tentar gerar outro ebook.</p>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
           <div className="flex flex-wrap items-center gap-2">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} className="max-w-md" />
-            <Button onClick={save} disabled={busy === "save"} variant="secondary">
+            <Button onClick={save} disabled={busy === "save" || status !== "completed"} variant="secondary">
               {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span className="ml-2">Salvar</span>
             </Button>
-            <Button onClick={copyContent} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
+            <Button onClick={copyContent} disabled={status !== "completed"} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
             <Button onClick={remove} disabled={busy === "delete"} variant="destructive" className="ml-auto">
               <Trash2 className="mr-2 h-4 w-4" /> Excluir
             </Button>
@@ -127,64 +171,76 @@ function EbookDetail() {
           {ebook.niche && <p className="mt-3 text-xs text-muted-foreground">Nicho: {ebook.niche}</p>}
         </div>
 
-        {/* Render conteúdo */}
-        <div className="rounded-2xl border border-border bg-card p-5">
-          {c.subtitle && <p className="text-base font-medium text-primary">{c.subtitle}</p>}
-          {c.description && <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{c.description}</p>}
+        {status === "completed" && (
+          <div className="rounded-2xl border border-border bg-card p-5">
+            {c.subtitle && <p className="text-base font-medium text-primary">{c.subtitle}</p>}
+            {c.introduction && (
+              <>
+                <h3 className="mt-4 font-display text-lg font-semibold">Introdução</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.introduction}</p>
+              </>
+            )}
+            {c.summary?.length ? (
+              <>
+                <h3 className="mt-6 font-display text-lg font-semibold">Sumário</h3>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
+                  {c.summary.map((s, i) => <li key={i}>{s}</li>)}
+                </ol>
+              </>
+            ) : null}
+            {(c.chapters ?? []).map((ch, i) => (
+              <div key={i} className="mt-6">
+                <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch.title}</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{ch.content}</p>
+              </div>
+            ))}
+            {c.conclusion && (
+              <>
+                <h3 className="mt-6 font-display text-lg font-semibold">Conclusão</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.conclusion}</p>
+              </>
+            )}
+            {c.call_to_action && (
+              <>
+                <h3 className="mt-6 font-display text-lg font-semibold">Chamada para Ação</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.call_to_action}</p>
+              </>
+            )}
+            {c.bonus?.length ? (
+              <>
+                <h3 className="mt-6 font-display text-lg font-semibold">Bônus sugeridos</h3>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                  {c.bonus.map((b, i) => <li key={i}>{b}</li>)}
+                </ul>
+              </>
+            ) : null}
+          </div>
+        )}
 
-          {c.summary && c.summary.length > 0 && (
-            <>
-              <h3 className="mt-6 font-display text-lg font-semibold">Sumário</h3>
-              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                {c.summary.map((s, i) => <li key={i}>{s}</li>)}
-              </ol>
-            </>
-          )}
+        {status === "completed" && (
+          <details className="rounded-2xl border border-border bg-card p-5">
+            <summary className="cursor-pointer font-medium">Editar conteúdo (JSON avançado)</summary>
+            <Textarea rows={12} className="mt-3 font-mono text-xs" value={contentText} onChange={(e) => setContentText(e.target.value)} />
+          </details>
+        )}
 
-          {(c.chapters ?? []).map((ch, i) => (
-            <div key={i} className="mt-6">
-              <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch.title}</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{ch.content}</p>
-            </div>
-          ))}
-
-          {c.conclusion && (
-            <>
-              <h3 className="mt-6 font-display text-lg font-semibold">Conclusão</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.conclusion}</p>
-            </>
-          )}
-
-          {c.bonus && (
-            <>
-              <h3 className="mt-6 font-display text-lg font-semibold">Bônus</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.bonus}</p>
-            </>
-          )}
-        </div>
-
-        {/* Edição JSON avançado */}
-        <details className="rounded-2xl border border-border bg-card p-5">
-          <summary className="cursor-pointer font-medium">Editar conteúdo (JSON avançado)</summary>
-          <Textarea rows={12} className="mt-3 font-mono text-xs" value={contentText} onChange={(e) => setContentText(e.target.value)} />
-        </details>
-
-        {/* Sales page */}
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="font-display text-lg font-semibold">Página de Vendas</h3>
               <p className="text-sm text-muted-foreground">
-                {salesQ.data ? "Gerada e publicada." : "Crie uma página de vendas baseada neste ebook."}
+                {salesStatus === "processing" ? "Gerando página…" :
+                 salesStatus === "failed" ? `Falhou: ${(salesQ.data as any)?.error_message ?? ""}` :
+                 salesQ.data ? "Gerada e publicada." : "Crie uma página de vendas baseada neste ebook."}
               </p>
             </div>
-            <Button onClick={generateSales} disabled={busy === "sales"} className="bg-gradient-primary text-primary-foreground shadow-glow">
-              {busy === "sales" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-              <span className="ml-2">{salesQ.data ? "Regerar" : "Gerar"}</span>
+            <Button onClick={generateSales} disabled={busy === "sales" || status !== "completed" || salesStatus === "processing"} className="bg-gradient-primary text-primary-foreground shadow-glow">
+              {busy === "sales" || salesStatus === "processing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+              <span className="ml-2">{salesQ.data ? "Regerar" : "Gerar Página de Vendas"}</span>
             </Button>
           </div>
 
-          {publicUrl && (
+          {publicUrl && salesStatus === "completed" && (
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-surface p-3">
               <code className="break-all text-xs">{publicUrl}</code>
               <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(publicUrl); toast.success("URL copiada"); }}>

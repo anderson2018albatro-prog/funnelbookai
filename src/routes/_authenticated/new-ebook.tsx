@@ -1,13 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Sparkles } from "lucide-react";
+import { Bot, Loader2, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/new-ebook")({
   component: NewEbook,
@@ -15,65 +17,60 @@ export const Route = createFileRoute("/_authenticated/new-ebook")({
 
 function NewEbook() {
   const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     tema: "",
     publico_alvo: "",
+    promessa: "",
+    problema: "",
     idioma: "Português",
     tom_voz: "Profissional e acessível",
-    capitulos: 6,
+    capitulos: 10,
+    uso: "venda",
   });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.tema || !form.publico_alvo) {
-      toast.error("Preencha tema e público-alvo.");
-      return;
-    }
-    setBusy(true);
-    try {
-      console.log("[generate-ebook] enviando", form);
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!form.tema || !form.publico_alvo) throw new Error("Preencha tema e público-alvo.");
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) throw new Error("Sessão expirada. Faça login novamente.");
-
       const { data, error } = await supabase.functions.invoke("generate-ebook", { body: form });
-      console.log("[generate-ebook] resposta", { data, error });
-
       if (error) {
-        // FunctionsHttpError esconde o body — tenta extrair
         let msg = error.message;
         try {
           const ctx: any = (error as any).context;
-          if (ctx && typeof ctx.json === "function") {
-            const body = await ctx.json();
-            if (body?.error) msg = body.error;
-          } else if (ctx && typeof ctx.text === "function") {
-            const t = await ctx.text();
-            if (t) msg = t;
-          }
+          if (ctx?.json) { const b = await ctx.json(); if (b?.error) msg = b.error; }
         } catch { /* noop */ }
         throw new Error(msg);
       }
       if ((data as any)?.error) throw new Error((data as any).error);
-      if (!(data as any)?.ebook?.id) throw new Error("Resposta inválida da função.");
-
-      toast.success("Ebook gerado com sucesso!");
-      navigate({ to: "/ebooks/$id", params: { id: (data as any).ebook.id } });
-    } catch (err: any) {
-      console.error("[generate-ebook] erro", err);
-      toast.error(err?.message ?? "Falha ao gerar ebook");
-    } finally {
-      setBusy(false);
-    }
-  }
+      const id = (data as any)?.ebookId;
+      if (!id) throw new Error("Resposta inválida da função.");
+      return id as string;
+    },
+    onSuccess: (id) => {
+      toast.success("Geração iniciada! Acompanhe abaixo.");
+      navigate({ to: "/ebooks/$id", params: { id } });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Falha ao gerar ebook"),
+  });
 
   return (
     <DashboardShell title="Gerar Ebook">
-      <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-5">
+      <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="mx-auto max-w-2xl space-y-5">
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-primary/40 bg-gradient-card p-4 shadow-elegant">
+          <div className="flex items-center gap-2 text-sm">
+            <Bot className="h-4 w-4 text-primary" />
+            <span>Prefere conversar? Use o Assistente IA para montar o briefing.</span>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => navigate({ to: "/assistant" })}>
+            Abrir assistente
+          </Button>
+        </div>
+
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Descreva seu ebook</h2>
+            <h2 className="font-display text-lg font-semibold">Briefing manual</h2>
           </div>
 
           <div className="space-y-4">
@@ -83,7 +80,17 @@ function NewEbook() {
             </div>
             <div>
               <Label htmlFor="publico">Público-alvo *</Label>
-              <Textarea id="publico" value={form.publico_alvo} onChange={(e) => setForm({ ...form, publico_alvo: e.target.value })} placeholder="Ex.: Mulheres 40-55 anos que querem perder peso sem dietas restritivas" rows={3} />
+              <Textarea id="publico" value={form.publico_alvo} onChange={(e) => setForm({ ...form, publico_alvo: e.target.value })} placeholder="Ex.: Mulheres 40-55 anos que querem perder peso sem dietas restritivas" rows={2} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="promessa">Promessa principal</Label>
+                <Textarea id="promessa" value={form.promessa} onChange={(e) => setForm({ ...form, promessa: e.target.value })} rows={2} placeholder="Ex.: Perder 5 kg em 60 dias sem dieta" />
+              </div>
+              <div>
+                <Label htmlFor="problema">Problema que resolve</Label>
+                <Textarea id="problema" value={form.problema} onChange={(e) => setForm({ ...form, problema: e.target.value })} rows={2} placeholder="Ex.: Cansaço, metabolismo lento" />
+              </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -95,17 +102,29 @@ function NewEbook() {
                 <Input id="tom" value={form.tom_voz} onChange={(e) => setForm({ ...form, tom_voz: e.target.value })} />
               </div>
             </div>
-            <div>
-              <Label htmlFor="caps">Quantidade de capítulos</Label>
-              <Input id="caps" type="number" min={3} max={15} value={form.capitulos} onChange={(e) => setForm({ ...form, capitulos: Number(e.target.value) || 6 })} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="caps">Quantidade de capítulos (3 a 15)</Label>
+                <Input id="caps" type="number" min={3} max={15} value={form.capitulos} onChange={(e) => setForm({ ...form, capitulos: Number(e.target.value) || 10 })} />
+              </div>
+              <div>
+                <Label>Uso</Label>
+                <Select value={form.uso} onValueChange={(v) => setForm({ ...form, uso: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="venda">Vender este ebook</SelectItem>
+                    <SelectItem value="gratuito">Usar como material gratuito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </div>
 
-        <Button type="submit" disabled={busy} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
-          {busy ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando ebook…</>) : (<><Sparkles className="mr-2 h-4 w-4" /> Gerar Ebook</>)}
+        <Button type="submit" disabled={mut.isPending} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
+          {mut.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Iniciando…</>) : (<><Sparkles className="mr-2 h-4 w-4" /> Gerar Ebook</>)}
         </Button>
-        <p className="text-center text-xs text-muted-foreground">Consome 1 crédito.</p>
+        <p className="text-center text-xs text-muted-foreground">Consome 1 crédito. A geração leva ~30-60s e é processada em background.</p>
       </form>
     </DashboardShell>
   );

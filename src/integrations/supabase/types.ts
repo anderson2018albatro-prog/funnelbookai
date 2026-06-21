@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      assistant_conversations: {
+        Row: {
+          briefing: Json | null
+          created_at: string
+          id: string
+          messages: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          briefing?: Json | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          briefing?: Json | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ebooks: {
         Row: {
           content: Json
