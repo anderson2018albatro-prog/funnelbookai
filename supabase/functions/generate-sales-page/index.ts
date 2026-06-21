@@ -169,8 +169,9 @@ Retorne APENAS JSON válido:
     const sp = JSON.parse(stripFences(raw));
     const title = sp.headline ?? ebook.title;
     const html = buildHtml(sp, title);
+    const blocks = buildBlocks(sp, title);
     const { error } = await admin.from("sales_pages").update({
-      title, html_content: html, status: "completed", error_message: null,
+      title, html_content: html, blocks, status: "completed", error_message: null,
     }).eq("id", pageId);
     if (error) throw new Error(error.message);
     console.log("[generate-sales-page] concluído", pageId);
