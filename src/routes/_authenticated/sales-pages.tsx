@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -7,10 +7,10 @@ import { Copy, ExternalLink, Megaphone, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/sales-pages")({
-  component: SalesList,
+  component: () => <Outlet />,
 });
 
-function SalesList() {
+export function SalesList() {
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["sales-list"],
