@@ -121,6 +121,14 @@ async function processInBackground(opts: {
 }) {
   const { admin, lovableKey, ebookId, userId, briefing } = opts;
   try {
+    const pages: number = briefing.paginas;
+    // ~280 palavras por página A5/A4 de ebook
+    const totalWords = pages * 280;
+    const chapters = Math.min(14, Math.max(4, Math.round(pages / 4)));
+    const wordsPerChapter = Math.max(400, Math.round(totalWords / chapters));
+    const minWords = Math.round(wordsPerChapter * 0.85);
+    const maxWords = Math.round(wordsPerChapter * 1.15);
+
     const prompt = `Você é um escritor profissional de ebooks. Crie um ebook COMPLETO no idioma "${briefing.idioma}", com tom "${briefing.tom_voz}".
 
 Briefing:
@@ -128,7 +136,8 @@ Briefing:
 - Público-alvo: ${briefing.publico_alvo}
 - Promessa principal: ${briefing.promessa ?? ""}
 - Problema que resolve: ${briefing.problema ?? ""}
-- Quantidade de capítulos: ${briefing.capitulos}
+- Tamanho alvo: ~${pages} páginas (aprox. ${totalWords} palavras no total)
+- Quantidade de capítulos: EXATAMENTE ${chapters}
 - Uso (venda ou material gratuito): ${briefing.uso ?? "venda"}
 
 Retorne APENAS JSON válido no schema:
@@ -142,12 +151,15 @@ Retorne APENAS JSON válido no schema:
   "call_to_action": string,
   "bonus": string[]
 }
-Regras:
-- Cada capítulo: 500–900 palavras, em texto corrido com parágrafos separados por \\n\\n.
+Regras OBRIGATÓRIAS:
+- Gere EXATAMENTE ${chapters} capítulos. Nem mais, nem menos.
+- Cada capítulo deve ter entre ${minWords} e ${maxWords} palavras (alvo ${wordsPerChapter}). Use parágrafos separados por \\n\\n e subtítulos em negrito quando fizer sentido.
 - summary: lista com o título de cada capítulo, na ordem.
 - bonus: 2 a 4 ideias acionáveis.
-- introduction: 2–4 parágrafos.
-- call_to_action: 1 parágrafo persuasivo.`;
+- introduction: 2–4 parágrafos densos.
+- conclusion: 2–3 parágrafos amarrando a transformação prometida.
+- call_to_action: 1 parágrafo persuasivo.
+- Dentro das strings JSON, use \\n para quebras de linha. Não retorne quebras de linha cruas.`;
 
     console.log("[generate-ebook] iniciando IA", ebookId);
     const ebookData = await callAI(lovableKey, prompt);
@@ -204,6 +216,7 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
+    const paginas = Math.min(Math.max(Number(body.paginas) || Number(body.capitulos) * 4 || 25, 8), 50);
     const briefing = {
       tema: body.tema,
       publico_alvo: body.publico_alvo,
@@ -211,7 +224,7 @@ Deno.serve(async (req) => {
       problema: body.problema ?? "",
       idioma: body.idioma ?? "Português",
       tom_voz: body.tom_voz ?? "Profissional e acessível",
-      capitulos: Math.min(Math.max(Number(body.capitulos) || 8, 3), 15),
+      paginas,
       uso: body.uso ?? "venda",
     };
     if (!briefing.tema || !briefing.publico_alvo) {
