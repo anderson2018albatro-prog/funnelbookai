@@ -140,6 +140,17 @@ function AssistantPage() {
           </Button>
         </div>
 
+        <div className="rounded-2xl border border-border bg-gradient-card p-3">
+          <div className="mb-2 text-xs font-semibold text-muted-foreground">O que você quer criar?</div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={resetConversation}>📚 Ebook</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate({ to: "/sales-pages/new" })}>🛒 Página de vendas</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate({ to: "/presells/new" })}>🔗 Presell de afiliado</Button>
+            <Button size="sm" variant="outline" onClick={resetConversation}>📚🛒 Ebook + página</Button>
+          </div>
+        </div>
+
+
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-border bg-card p-4">
           {messages.map((m, i) => (
             <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
