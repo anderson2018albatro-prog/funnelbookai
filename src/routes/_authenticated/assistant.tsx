@@ -88,7 +88,17 @@ function AssistantPage() {
   }
 
   const generateMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { withPage: boolean; onlyPage?: boolean }) => {
+      if (opts.onlyPage) {
+        // Find latest ebook for user to attach a page (fallback: generate ebook too)
+        const { data: ebooks } = await supabase.from("ebooks")
+          .select("id, status").eq("status", "completed")
+          .order("created_at", { ascending: false }).limit(1);
+        if (!ebooks?.length) throw new Error("Gere um ebook primeiro para criar a página.");
+        const { error } = await supabase.functions.invoke("generate-sales-page", { body: { ebookId: ebooks[0].id } });
+        if (error) throw new Error(error.message);
+        return { ebookId: ebooks[0].id };
+      }
       const { data, error } = await supabase.functions.invoke("generate-ebook", { body: briefing });
       if (error) {
         let msg = error.message;
@@ -99,10 +109,10 @@ function AssistantPage() {
         throw new Error(msg);
       }
       if ((data as any)?.error) throw new Error((data as any).error);
-      return data as { ebookId: string };
+      return { ...(data as { ebookId: string }), withPage: opts.withPage };
     },
-    onSuccess: (data) => {
-      toast.success("Geração iniciada! Acompanhe na próxima tela.");
+    onSuccess: (data: any) => {
+      toast.success("Pronto! Acompanhe na próxima tela.");
       navigate({ to: "/ebooks/$id", params: { id: data.ebookId } });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao gerar"),
