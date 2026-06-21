@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy } from "lucide-react";
+import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
