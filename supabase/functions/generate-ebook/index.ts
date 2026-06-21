@@ -23,7 +23,67 @@ function stripFences(s: string) {
   if (c.startsWith("```")) {
     c = c.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
   }
+  // Trim to outermost { ... } if there's extra prose
+  const first = c.indexOf("{");
+  const last = c.lastIndexOf("}");
+  if (first > 0 && last > first) c = c.slice(first, last + 1);
   return c;
+}
+
+// Sanitiza JSON vindo de LLMs: escapa caracteres de controle crus
+// dentro de strings e neutraliza barras invertidas inválidas.
+// Causa raiz do erro "Bad escaped character in JSON at position X".
+function sanitizeLlmJson(s: string): string {
+  let out = "";
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (esc) {
+      // já validado abaixo; copia
+      out += ch;
+      esc = false;
+      continue;
+    }
+    if (ch === "\\") {
+      if (inStr) {
+        const next = s[i + 1] ?? "";
+        if (!'"\\/bfnrtu'.includes(next)) {
+          // escape inválido -> escapa a própria barra
+          out += "\\\\";
+          continue;
+        }
+      }
+      out += ch;
+      esc = true;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = !inStr;
+      out += ch;
+      continue;
+    }
+    if (inStr) {
+      const code = ch.charCodeAt(0);
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { out += "\\r"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      if (code < 0x20) {
+        out += "\\u" + code.toString(16).padStart(4, "0");
+        continue;
+      }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function parseLoose(raw: string): any {
+  const cleaned = stripFences(raw);
+  try { return JSON.parse(cleaned); } catch (_) { /* fallthrough */ }
+  try { return JSON.parse(sanitizeLlmJson(cleaned)); } catch (e) {
+    throw new Error(`JSON inválido da IA: ${(e as Error).message}. Prévia: ${cleaned.slice(0, 200)}`);
+  }
 }
 
 async function callAI(lovableKey: string, prompt: string) {
@@ -35,8 +95,9 @@ async function callAI(lovableKey: string, prompt: string) {
     },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
+      response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "Você responde APENAS com JSON válido, sem markdown e sem cercas de código." },
+        { role: "system", content: "Você responde APENAS com um único objeto JSON válido. Não use markdown nem cercas de código. Dentro das strings, use \\n para quebras de linha — nunca quebras de linha cruas." },
         { role: "user", content: prompt },
       ],
     }),
@@ -48,7 +109,7 @@ async function callAI(lovableKey: string, prompt: string) {
   const ai = await aiRes.json();
   const content = ai.choices?.[0]?.message?.content ?? "";
   if (!content) throw new Error("Resposta vazia da IA");
-  return JSON.parse(stripFences(content));
+  return parseLoose(content);
 }
 
 async function processInBackground(opts: {
