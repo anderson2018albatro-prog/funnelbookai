@@ -129,15 +129,18 @@ function EbookDetail() {
   }
 
   function copyContent() {
+    const summary = asArray(c.summary);
+    const bonus = asArray(c.bonus);
+    const chapters = Array.isArray(c.chapters) ? c.chapters : [];
     const md = [
       `# ${c.title ?? title}`,
       c.subtitle ? `## ${c.subtitle}\n` : "",
       c.introduction ? `\n## Introdução\n\n${c.introduction}` : "",
-      c.summary?.length ? `\n## Sumário\n\n${c.summary.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "",
-      ...(c.chapters ?? []).map((ch, i) => `\n## Capítulo ${i + 1}: ${ch.title}\n\n${ch.content}`),
+      summary.length ? `\n## Sumário\n\n${summary.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "",
+      ...chapters.map((ch: any, i: number) => `\n## Capítulo ${i + 1}: ${ch?.title ?? ""}\n\n${ch?.content ?? ""}`),
       c.conclusion ? `\n## Conclusão\n\n${c.conclusion}` : "",
       c.call_to_action ? `\n## Chamada para Ação\n\n${c.call_to_action}` : "",
-      c.bonus?.length ? `\n## Bônus\n\n${c.bonus.map((b) => `- ${b}`).join("\n")}` : "",
+      bonus.length ? `\n## Bônus\n\n${bonus.map((b) => `- ${b}`).join("\n")}` : "",
     ].filter(Boolean).join("\n");
     navigator.clipboard.writeText(md);
     toast.success("Conteúdo copiado");
