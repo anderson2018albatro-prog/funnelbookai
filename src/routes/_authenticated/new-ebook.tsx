@@ -32,13 +32,36 @@ function NewEbook() {
     }
     setBusy(true);
     try {
+      console.log("[generate-ebook] enviando", form);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) throw new Error("Sessão expirada. Faça login novamente.");
+
       const { data, error } = await supabase.functions.invoke("generate-ebook", { body: form });
-      if (error) throw error;
+      console.log("[generate-ebook] resposta", { data, error });
+
+      if (error) {
+        // FunctionsHttpError esconde o body — tenta extrair
+        let msg = error.message;
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) msg = body.error;
+          } else if (ctx && typeof ctx.text === "function") {
+            const t = await ctx.text();
+            if (t) msg = t;
+          }
+        } catch { /* noop */ }
+        throw new Error(msg);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
+      if (!(data as any)?.ebook?.id) throw new Error("Resposta inválida da função.");
+
       toast.success("Ebook gerado com sucesso!");
       navigate({ to: "/ebooks/$id", params: { id: (data as any).ebook.id } });
     } catch (err: any) {
-      toast.error(err.message ?? "Falha ao gerar ebook");
+      console.error("[generate-ebook] erro", err);
+      toast.error(err?.message ?? "Falha ao gerar ebook");
     } finally {
       setBusy(false);
     }
