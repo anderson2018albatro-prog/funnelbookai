@@ -62,7 +62,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {cards.map((c) => (
             <div key={c.label} className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
               <div className="flex items-center justify-between">
