@@ -264,6 +264,7 @@ function EbookDetail() {
               <span className="ml-2">Salvar</span>
             </Button>
             <Button onClick={copyContent} disabled={status !== "completed"} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
+            <Button onClick={downloadPDF} disabled={status !== "completed"} variant="outline"><FileDown className="mr-2 h-4 w-4" /> Baixar PDF</Button>
             <Button onClick={remove} disabled={busy === "delete"} variant="destructive" className="ml-auto">
               <Trash2 className="mr-2 h-4 w-4" /> Excluir
             </Button>
