@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -9,6 +9,18 @@ import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { AlertTriangle, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Save, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
+
+/** Normalize a field that the AI may return as string, array, or null. */
+function asArray(v: unknown): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.filter((x) => x != null).map((x) => String(x));
+  if (typeof v === "string") {
+    // split into bullets if multiline, otherwise single item
+    const parts = v.split(/\n\s*(?:[-*•]\s+|\d+[.)]\s+)/).map((s) => s.trim()).filter(Boolean);
+    return parts.length > 1 ? parts : [v];
+  }
+  return [String(v)];
+}
 
 export const Route = createFileRoute("/_authenticated/ebooks/$id")({
   component: EbookDetail,
