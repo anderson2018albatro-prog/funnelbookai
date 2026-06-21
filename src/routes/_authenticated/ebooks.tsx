@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Copy, ExternalLink, Loader2, Megaphone, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Copy, ExternalLink, Loader2, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/ebooks")({
@@ -67,20 +67,27 @@ function EbooksListContent() {
                   <p className="mt-1 text-xs text-muted-foreground">{new Date(e.created_at).toLocaleDateString()}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => navigate({ to: "/ebooks/$id", params: { id: e.id } })}>Abrir</Button>
-                    {e.status === "completed" && (sp ? (
+                    {sp ? (
                       <>
-                        <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(url!); toast.success("Link copiado"); }}>
-                          <Copy className="mr-1 h-3 w-3" /> Link
-                        </Button>
-                        <a href={url!} target="_blank" rel="noopener">
-                          <Button size="sm" variant="ghost"><ExternalLink className="mr-1 h-3 w-3" /> Página</Button>
-                        </a>
+                        <Link to="/sales-pages/$id/edit" params={{ id: sp.id }}>
+                          <Button size="sm" variant="secondary"><Pencil className="mr-1 h-3 w-3" /> Editar Página</Button>
+                        </Link>
+                        {url && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(url); toast.success("Link copiado"); }}>
+                              <Copy className="mr-1 h-3 w-3" /> Link
+                            </Button>
+                            <a href={url} target="_blank" rel="noopener">
+                              <Button size="sm" variant="ghost"><ExternalLink className="mr-1 h-3 w-3" /> Página</Button>
+                            </a>
+                          </>
+                        )}
                       </>
-                    ) : (
+                    ) : e.status === "completed" ? (
                       <Button size="sm" variant="secondary" onClick={() => genPage(e.id)}>
                         <Megaphone className="mr-1 h-3 w-3" /> Gerar página
                       </Button>
-                    ))}
+                    ) : null}
                     <Button size="sm" variant="destructive" className="ml-auto" onClick={() => remove(e.id)}>
                       <Trash2 className="h-3 w-3" />
                     </Button>

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy } from "lucide-react";
+import { BookOpen, Bot, Megaphone, Sparkles, Plus, ArrowRight, Copy, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -92,6 +92,11 @@ function Dashboard() {
                       <Button size="sm" variant="ghost" onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(url); toast.success("Link copiado"); }}>
                         <Copy className="h-3 w-3" />
                       </Button>
+                    )}
+                    {sp && (
+                      <Link to="/sales-pages/$id/edit" params={{ id: sp.id }}>
+                        <Button size="sm" variant="ghost"><Pencil className="mr-1 h-3 w-3" /> Editar página</Button>
+                      </Link>
                     )}
                     <Link to="/ebooks/$id" params={{ id: p.id }}>
                       <Button size="sm" variant="ghost"><ArrowRight className="h-4 w-4" /></Button>

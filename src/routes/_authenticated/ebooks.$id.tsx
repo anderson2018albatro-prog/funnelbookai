@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Save, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 
@@ -15,16 +15,11 @@ function asArray(v: unknown): string[] {
   if (!v) return [];
   if (Array.isArray(v)) return v.filter((x) => x != null).map((x) => String(x));
   if (typeof v === "string") {
-    // split into bullets if multiline, otherwise single item
     const parts = v.split(/\n\s*(?:[-*•]\s+|\d+[.)]\s+)/).map((s) => s.trim()).filter(Boolean);
     return parts.length > 1 ? parts : [v];
   }
   return [String(v)];
 }
-
-export const Route = createFileRoute("/_authenticated/ebooks/$id")({
-  component: EbookDetail,
-});
 
 type EbookContent = {
   title?: string;
@@ -38,11 +33,59 @@ type EbookContent = {
   briefing?: any;
 };
 
+/** Accept content as JSON, JSON string, or loose shapes (chapters/capitulos/text/body/conteudo). */
+function normalizeEbookContent(raw: unknown): EbookContent {
+  if (!raw) return {};
+  let obj: any = raw;
+  if (typeof raw === "string") {
+    try { obj = JSON.parse(raw); } catch { return { introduction: raw }; }
+  }
+  if (typeof obj !== "object" || obj === null) return {};
+
+  const chaptersRaw = obj.chapters ?? obj.capitulos ?? obj.chapter_list ?? [];
+  const chapters = Array.isArray(chaptersRaw)
+    ? chaptersRaw.map((ch: any) => ({
+        title: String(ch?.title ?? ch?.titulo ?? ch?.name ?? ""),
+        content: String(ch?.content ?? ch?.conteudo ?? ch?.text ?? ch?.body ?? ""),
+      }))
+    : [];
+
+  const introduction =
+    obj.introduction ?? obj.introducao ?? obj.intro ?? obj.text ?? obj.body ?? obj.conteudo ?? "";
+
+  return {
+    title: obj.title ?? obj.titulo,
+    subtitle: obj.subtitle ?? obj.subtitulo,
+    introduction: typeof introduction === "string" ? introduction : "",
+    summary: asArray(obj.summary ?? obj.sumario ?? obj.indice),
+    chapters,
+    conclusion: obj.conclusion ?? obj.conclusao ?? "",
+    call_to_action: obj.call_to_action ?? obj.cta ?? obj.chamada ?? "",
+    bonus: asArray(obj.bonus ?? obj.bonuses),
+    briefing: obj.briefing,
+  };
+}
+
+function hasRenderableContent(c: EbookContent): boolean {
+  return !!(
+    c.introduction ||
+    c.conclusion ||
+    c.call_to_action ||
+    (c.chapters && c.chapters.length > 0) ||
+    (c.summary && c.summary.length > 0) ||
+    (c.bonus && c.bonus.length > 0)
+  );
+}
+
+export const Route = createFileRoute("/_authenticated/ebooks/$id")({
+  component: EbookDetail,
+});
+
 function EbookDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [busy, setBusy] = useState<null | "save" | "delete" | "sales">(null);
+  const [busy, setBusy] = useState<null | "save" | "delete" | "sales" | "pdf">(null);
 
   const ebookQ = useQuery({
     queryKey: ["ebook", id],
@@ -78,6 +121,9 @@ function EbookDetail() {
     }
   }, [ebookQ.data?.id, ebookQ.data?.status]);
 
+  const c = useMemo(() => normalizeEbookContent(ebookQ.data?.content), [ebookQ.data?.content]);
+  const renderable = hasRenderableContent(c);
+
   if (ebookQ.isLoading)
     return (<DashboardShell title="Ebook"><div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></DashboardShell>);
   if (!ebookQ.data)
@@ -85,12 +131,11 @@ function EbookDetail() {
 
   const ebook = ebookQ.data;
   const status = (ebook as any).status as string;
-  const c = (ebook.content ?? {}) as EbookContent;
 
   async function save() {
     setBusy("save");
     try {
-      let parsed: any = c;
+      let parsed: any = ebookQ.data?.content;
       try { parsed = JSON.parse(contentText); } catch { /* keep object */ }
       const { error } = await supabase.from("ebooks").update({ title, content: parsed }).eq("id", id);
       if (error) throw error;
@@ -146,107 +191,110 @@ function EbookDetail() {
     toast.success("Conteúdo copiado");
   }
 
-  function downloadPDF() {
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const margin = 56;
-    const maxW = pageW - margin * 2;
-    let y = margin;
+  async function downloadPDF() {
+    setBusy("pdf");
+    try {
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 56;
+      const maxW = pageW - margin * 2;
+      let y = margin;
 
-    function addPageNumber(n: number) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(120);
-      doc.text(String(n), pageW / 2, pageH - 24, { align: "center" });
-      doc.setTextColor(0);
-    }
-    function newPage() {
-      doc.addPage();
-      y = margin;
-    }
-    function ensure(h: number) {
-      if (y + h > pageH - margin) newPage();
-    }
-    function writeHeading(text: string, size = 18) {
-      ensure(size + 20);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(size);
-      const lines = doc.splitTextToSize(text, maxW) as string[];
-      doc.text(lines, margin, y);
-      y += lines.length * (size + 4) + 8;
-    }
-    function writeBody(text: string) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      const lines = doc.splitTextToSize(text, maxW) as string[];
-      for (const line of lines) {
-        ensure(16);
-        doc.text(line, margin, y);
-        y += 16;
+      function addPageNumber(n: number) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(120);
+        doc.text(String(n), pageW / 2, pageH - 24, { align: "center" });
+        doc.setTextColor(0);
       }
-      y += 6;
-    }
+      function newPage() { doc.addPage(); y = margin; }
+      function ensure(h: number) { if (y + h > pageH - margin) newPage(); }
+      function writeHeading(text: string, size = 18) {
+        ensure(size + 20);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(size);
+        const lines = doc.splitTextToSize(text, maxW) as string[];
+        doc.text(lines, margin, y);
+        y += lines.length * (size + 4) + 8;
+      }
+      function writeBody(text: string) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        const lines = doc.splitTextToSize(text, maxW) as string[];
+        for (const line of lines) {
+          ensure(16);
+          doc.text(line, margin, y);
+          y += 16;
+        }
+        y += 6;
+      }
 
-    // Capa
-    doc.setFillColor(99, 102, 241);
-    doc.rect(0, 0, pageW, pageH, "F");
-    doc.setTextColor(255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(32);
-    const tLines = doc.splitTextToSize(c.title ?? title, maxW) as string[];
-    doc.text(tLines, pageW / 2, pageH / 2 - 30, { align: "center" });
-    if (c.subtitle) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(16);
-      const sLines = doc.splitTextToSize(c.subtitle, maxW) as string[];
-      doc.text(sLines, pageW / 2, pageH / 2 + 20, { align: "center" });
-    }
-    doc.setTextColor(0);
-    newPage();
-
-    const summary = asArray(c.summary);
-    const chapters = Array.isArray(c.chapters) ? c.chapters : [];
-    const bonus = asArray(c.bonus);
-
-    if (summary.length) {
-      writeHeading("Sumário", 22);
-      summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
+      doc.setFillColor(99, 102, 241);
+      doc.rect(0, 0, pageW, pageH, "F");
+      doc.setTextColor(255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(32);
+      const tLines = doc.splitTextToSize(c.title ?? title, maxW) as string[];
+      doc.text(tLines, pageW / 2, pageH / 2 - 30, { align: "center" });
+      if (c.subtitle) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(16);
+        const sLines = doc.splitTextToSize(c.subtitle, maxW) as string[];
+        doc.text(sLines, pageW / 2, pageH / 2 + 20, { align: "center" });
+      }
+      doc.setTextColor(0);
       newPage();
-    }
-    if (c.introduction) {
-      writeHeading("Introdução", 20);
-      writeBody(c.introduction);
-    }
-    chapters.forEach((ch: any, i: number) => {
-      newPage();
-      writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
-      writeBody(String(ch?.content ?? ""));
-    });
-    if (c.conclusion) {
-      newPage();
-      writeHeading("Conclusão", 20);
-      writeBody(c.conclusion);
-    }
-    if (c.call_to_action) {
-      ensure(80);
-      writeHeading("Próximos passos", 18);
-      writeBody(c.call_to_action);
-    }
-    if (bonus.length) {
-      newPage();
-      writeHeading("Bônus", 20);
-      bonus.forEach((b) => writeBody(`• ${b}`));
-    }
 
-    const total = doc.getNumberOfPages();
-    for (let p = 2; p <= total; p++) {
-      doc.setPage(p);
-      addPageNumber(p - 1);
-    }
+      const summary = asArray(c.summary);
+      const chapters = Array.isArray(c.chapters) ? c.chapters : [];
+      const bonus = asArray(c.bonus);
 
-    const safe = (c.title ?? title).replace(/[^\w\u00C0-\u017F\s-]/g, "").trim().slice(0, 60) || "ebook";
-    doc.save(`${safe}.pdf`);
+      if (summary.length) {
+        writeHeading("Sumário", 22);
+        summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
+        newPage();
+      }
+      if (c.introduction) {
+        writeHeading("Introdução", 20);
+        writeBody(c.introduction);
+      }
+      chapters.forEach((ch: any, i: number) => {
+        newPage();
+        writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
+        writeBody(String(ch?.content ?? ""));
+      });
+      if (c.conclusion) {
+        newPage();
+        writeHeading("Conclusão", 20);
+        writeBody(c.conclusion);
+      }
+      if (c.call_to_action) {
+        ensure(80);
+        writeHeading("Próximos passos", 18);
+        writeBody(c.call_to_action);
+      }
+      if (bonus.length) {
+        newPage();
+        writeHeading("Bônus", 20);
+        bonus.forEach((b) => writeBody(`• ${b}`));
+      }
+
+      const total = doc.getNumberOfPages();
+      for (let p = 2; p <= total; p++) {
+        doc.setPage(p);
+        addPageNumber(p - 1);
+      }
+
+      const safe = (c.title ?? title).replace(/[^\w\u00C0-\u017F\s-]/g, "").trim().slice(0, 60) || "ebook";
+      doc.save(`${safe}.pdf`);
+      toast.success("PDF gerado");
+    } catch (e: any) {
+      console.error("[downloadPDF] erro:", e);
+      toast.error(`Erro ao gerar PDF: ${e?.message ?? e}`);
+    } finally {
+      setBusy(null);
+    }
   }
 
   const publicUrl = salesQ.data ? `${window.location.origin}/p/${salesQ.data.slug}` : null;
@@ -255,22 +303,21 @@ function EbookDetail() {
   return (
     <DashboardShell title={ebook.title}>
       <div className="mx-auto max-w-4xl space-y-5">
-        {status === "processing" && (
+        {status === "processing" && !renderable && (
           <div className="flex items-center gap-3 rounded-2xl border border-primary/40 bg-gradient-card p-4 shadow-elegant">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <div>
               <div className="font-medium">Gerando seu ebook…</div>
-              <div className="text-xs text-muted-foreground">Isso leva ~30–60 segundos. Você pode sair desta tela; o resultado é salvo automaticamente.</div>
+              <div className="text-xs text-muted-foreground">Isso leva ~30–60 segundos.</div>
             </div>
           </div>
         )}
-        {status === "failed" && (
+        {status === "failed" && !renderable && (
           <div className="flex items-start gap-3 rounded-2xl border border-destructive/50 bg-card p-4">
             <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
             <div className="flex-1">
               <div className="font-medium text-destructive">Falha na geração</div>
               <div className="mt-1 text-xs text-muted-foreground">{(ebook as any).error_message ?? "Tente novamente."}</div>
-              <p className="mt-1 text-xs text-muted-foreground">Seu crédito foi devolvido. Você pode tentar gerar outro ebook.</p>
             </div>
           </div>
         )}
@@ -278,20 +325,23 @@ function EbookDetail() {
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
           <div className="flex flex-wrap items-center gap-2">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} className="max-w-md" />
-            <Button onClick={save} disabled={busy === "save" || status !== "completed"} variant="secondary">
+            <Button onClick={save} disabled={busy === "save"} variant="secondary">
               {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span className="ml-2">Salvar</span>
             </Button>
-            <Button onClick={copyContent} disabled={status !== "completed"} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
-            <Button onClick={downloadPDF} disabled={status !== "completed"} variant="outline"><FileDown className="mr-2 h-4 w-4" /> Baixar PDF</Button>
+            <Button onClick={copyContent} disabled={!renderable} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
+            <Button onClick={downloadPDF} disabled={!renderable || busy === "pdf"} variant="outline">
+              {busy === "pdf" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+              Baixar PDF
+            </Button>
             <Button onClick={remove} disabled={busy === "delete"} variant="destructive" className="ml-auto">
               <Trash2 className="mr-2 h-4 w-4" /> Excluir
             </Button>
           </div>
-          {ebook.niche && <p className="mt-3 text-xs text-muted-foreground">Nicho: {ebook.niche}</p>}
+          {ebook.niche && <p className="mt-3 text-xs text-muted-foreground">Nicho: {ebook.niche} · Status: {status}</p>}
         </div>
 
-        {status === "completed" && (
+        {renderable ? (
           <div className="rounded-2xl border border-border bg-card p-5">
             {c.subtitle && <p className="text-base font-medium text-primary">{c.subtitle}</p>}
             {c.introduction && (
@@ -335,41 +385,55 @@ function EbookDetail() {
               </>
             ) : null; })()}
           </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border bg-card p-5 text-sm">
+            <div className="font-medium">Sem conteúdo renderizável</div>
+            <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
+              <li>status atual: <code>{String(status)}</code></li>
+              <li>ebook.content existe: <code>{String(!!ebook.content)}</code></li>
+              <li>tipo: <code>{typeof ebook.content}</code></li>
+            </ul>
+            <pre className="mt-3 max-h-64 overflow-auto rounded bg-surface p-3 text-xs">
+              {JSON.stringify(ebook.content, null, 2)?.slice(0, 2000) ?? "null"}
+            </pre>
+          </div>
         )}
 
-        {status === "completed" && (
-          <details className="rounded-2xl border border-border bg-card p-5">
-            <summary className="cursor-pointer font-medium">Editar conteúdo (JSON avançado)</summary>
-            <Textarea rows={12} className="mt-3 font-mono text-xs" value={contentText} onChange={(e) => setContentText(e.target.value)} />
-          </details>
-        )}
+        <details className="rounded-2xl border border-border bg-card p-5">
+          <summary className="cursor-pointer font-medium">Editar conteúdo (JSON avançado)</summary>
+          <Textarea rows={12} className="mt-3 font-mono text-xs" value={contentText} onChange={(e) => setContentText(e.target.value)} />
+        </details>
 
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-display text-lg font-semibold">Página de Vendas</h3>
               <p className="text-sm text-muted-foreground">
-                {salesStatus === "processing" ? "Gerando página…" :
-                 salesStatus === "failed" ? `Falhou: ${(salesQ.data as any)?.error_message ?? ""}` :
-                 salesQ.data ? "Gerada e publicada." : "Crie uma página de vendas baseada neste ebook."}
+                {salesQ.data
+                  ? `Status: ${salesStatus ?? "—"}${publicUrl ? "" : ""}`
+                  : "Crie uma página de vendas baseada neste ebook."}
               </p>
             </div>
-            <Button onClick={generateSales} disabled={busy === "sales" || status !== "completed" || salesStatus === "processing"} className="bg-gradient-primary text-primary-foreground shadow-glow">
-              {busy === "sales" || salesStatus === "processing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-              <span className="ml-2">{salesQ.data ? "Regerar" : "Gerar Página de Vendas"}</span>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {salesQ.data && (
+                <Link to="/sales-pages/$id/edit" params={{ id: salesQ.data.id }}>
+                  <Button size="sm" variant="secondary"><Pencil className="mr-1 h-4 w-4" /> Editar página</Button>
+                </Link>
+              )}
+              <Button onClick={generateSales} disabled={busy === "sales" || salesStatus === "processing"} className="bg-gradient-primary text-primary-foreground shadow-glow">
+                {busy === "sales" || salesStatus === "processing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+                <span className="ml-2">{salesQ.data ? "Regerar" : "Gerar Página de Vendas"}</span>
+              </Button>
+            </div>
           </div>
 
-          {publicUrl && salesStatus === "completed" && (
+          {publicUrl && (
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-surface p-3">
               <code className="break-all text-xs">{publicUrl}</code>
               <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(publicUrl); toast.success("URL copiada"); }}>
                 <Copy className="h-3 w-3" />
               </Button>
-              <Link to="/sales-pages/$id/edit" params={{ id: salesQ.data!.id }} className="ml-auto">
-                <Button size="sm" variant="secondary"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
-              </Link>
-              <a href={publicUrl} target="_blank" rel="noopener">
+              <a href={publicUrl} target="_blank" rel="noopener" className="ml-auto">
                 <Button size="sm" variant="outline"><ExternalLink className="mr-1 h-3 w-3" /> Abrir</Button>
               </a>
             </div>
