@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -7,11 +7,15 @@ import { BookOpen, Copy, ExternalLink, Loader2, Megaphone, Plus, Trash2 } from "
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/ebooks")({
-  component: EbooksList,
+  component: () => <Outlet />,
 });
 
-function EbooksList() {
-  const navigate = useNavigate();
+export function EbooksList() {
+  return <EbooksListContent />;
+}
+
+function EbooksListContent() {
+  const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["ebooks-list"],
