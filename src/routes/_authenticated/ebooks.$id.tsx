@@ -300,18 +300,18 @@ function EbookDetail() {
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.introduction}</p>
               </>
             )}
-            {c.summary?.length ? (
+            {(() => { const summary = asArray(c.summary); return summary.length ? (
               <>
                 <h3 className="mt-6 font-display text-lg font-semibold">Sumário</h3>
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                  {c.summary.map((s, i) => <li key={i}>{s}</li>)}
+                  {summary.map((s, i) => <li key={i}>{s}</li>)}
                 </ol>
               </>
-            ) : null}
-            {(c.chapters ?? []).map((ch, i) => (
+            ) : null; })()}
+            {(Array.isArray(c.chapters) ? c.chapters : []).map((ch: any, i: number) => (
               <div key={i} className="mt-6">
-                <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch.title}</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{ch.content}</p>
+                <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch?.title ?? ""}</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{String(ch?.content ?? "")}</p>
               </div>
             ))}
             {c.conclusion && (
@@ -326,14 +326,14 @@ function EbookDetail() {
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.call_to_action}</p>
               </>
             )}
-            {c.bonus?.length ? (
+            {(() => { const bonus = asArray(c.bonus); return bonus.length ? (
               <>
                 <h3 className="mt-6 font-display text-lg font-semibold">Bônus sugeridos</h3>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                  {c.bonus.map((b, i) => <li key={i}>{b}</li>)}
+                  {bonus.map((b, i) => <li key={i}>{b}</li>)}
                 </ul>
               </>
-            ) : null}
+            ) : null; })()}
           </div>
         )}
 
