@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Megaphone, FolderKanban, Plus, ArrowRight } from "lucide-react";
+import { BookOpen, Megaphone, Sparkles, Plus, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -13,25 +13,25 @@ function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [p, e, s] = await Promise.all([
-        supabase.from("projects").select("id", { count: "exact", head: true }),
+      const [e, s, c] = await Promise.all([
         supabase.from("ebooks").select("id", { count: "exact", head: true }),
         supabase.from("sales_pages").select("id", { count: "exact", head: true }),
+        supabase.from("user_credits").select("credits").maybeSingle(),
       ]);
-      return { projects: p.count ?? 0, ebooks: e.count ?? 0, pages: s.count ?? 0 };
+      return { ebooks: e.count ?? 0, pages: s.count ?? 0, credits: c.data?.credits ?? 0 };
     },
   });
 
   const { data: recent } = useQuery({
-    queryKey: ["recent-projects"],
+    queryKey: ["recent-ebooks"],
     queryFn: async () => {
-      const { data } = await supabase.from("projects").select("*").order("created_at", { ascending: false }).limit(5);
+      const { data } = await supabase.from("ebooks").select("id,title,niche,created_at").order("created_at", { ascending: false }).limit(5);
       return data ?? [];
     },
   });
 
   const cards = [
-    { label: "Projetos", value: stats?.projects ?? 0, icon: FolderKanban },
+    { label: "Créditos", value: stats?.credits ?? 0, icon: Sparkles },
     { label: "Ebooks", value: stats?.ebooks ?? 0, icon: BookOpen },
     { label: "Páginas de venda", value: stats?.pages ?? 0, icon: Megaphone },
   ];
@@ -42,9 +42,9 @@ function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-2xl font-bold">Bem-vindo de volta 👋</h2>
-            <p className="text-sm text-muted-foreground">Gerencie seus ebooks e funis de venda em um só lugar.</p>
+            <p className="text-sm text-muted-foreground">Gere ebooks e páginas de vendas com IA.</p>
           </div>
-          <Link to="/new-project"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Novo projeto</Button></Link>
+          <Link to="/new-ebook"><Button className="bg-gradient-primary text-primary-foreground shadow-glow"><Plus className="mr-2 h-4 w-4" /> Gerar Ebook</Button></Link>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -61,17 +61,17 @@ function Dashboard() {
 
         <div className="rounded-2xl border border-border bg-card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-display font-semibold">Projetos recentes</h3>
-            <Link to="/projects" className="text-xs text-muted-foreground hover:text-foreground">Ver todos</Link>
+            <h3 className="font-display font-semibold">Ebooks recentes</h3>
+            <Link to="/ebooks" className="text-xs text-muted-foreground hover:text-foreground">Ver todos</Link>
           </div>
           {recent && recent.length > 0 ? (
             <ul className="divide-y divide-border">
               {recent.map((p) => (
                 <li key={p.id}>
-                  <Link to="/projects/$id" params={{ id: p.id }} className="flex items-center justify-between py-3 hover:bg-accent/20 -mx-2 px-2 rounded-md">
+                  <Link to="/ebooks/$id" params={{ id: p.id }} className="flex items-center justify-between py-3 hover:bg-accent/20 -mx-2 px-2 rounded-md">
                     <div>
-                      <div className="font-medium">{p.nome_projeto}</div>
-                      <div className="text-xs text-muted-foreground">{p.nicho}</div>
+                      <div className="font-medium">{p.title}</div>
+                      <div className="text-xs text-muted-foreground">{p.niche}</div>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </Link>
@@ -80,7 +80,7 @@ function Dashboard() {
             </ul>
           ) : (
             <div className="py-10 text-center text-sm text-muted-foreground">
-              Nenhum projeto ainda. <Link to="/new-project" className="text-primary underline">Criar o primeiro</Link>.
+              Nenhum ebook ainda. <Link to="/new-ebook" className="text-primary underline">Gerar o primeiro</Link>.
             </div>
           )}
         </div>

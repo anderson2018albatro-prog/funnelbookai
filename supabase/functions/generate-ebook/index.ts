@@ -1,5 +1,5 @@
 // Edge Function: generate-ebook
-// Generates ebook content via OpenAI and saves it for the authenticated user.
+// Gera um ebook completo via Lovable AI (Gemini) e salva na tabela ebooks.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -18,8 +18,8 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiKey) return json({ error: "OPENAI_API_KEY não configurada" }, 500);
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!lovableKey) return json({ error: "LOVABLE_API_KEY não configurada" }, 500);
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
@@ -30,103 +30,97 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json();
-    const { projectId } = body ?? {};
-    if (!projectId) return json({ error: "projectId obrigatório" }, 400);
+    const {
+      tema,
+      publico_alvo,
+      idioma = "Português",
+      tom_voz = "Profissional e acessível",
+      capitulos = 6,
+    } = body ?? {};
+    if (!tema || !publico_alvo) {
+      return json({ error: "tema e publico_alvo são obrigatórios" }, 400);
+    }
 
-    const { data: project, error: pErr } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
+    // Verifica créditos
+    const { data: creditsRow } = await supabase
+      .from("user_credits")
+      .select("credits")
       .eq("user_id", userId)
-      .single();
-    if (pErr || !project) return json({ error: "Projeto não encontrado" }, 404);
+      .maybeSingle();
+    if (!creditsRow || creditsRow.credits <= 0) {
+      return json({ error: "Créditos insuficientes" }, 402);
+    }
 
-    const prompt = `Você é um escritor profissional de ebooks. Crie um ebook completo no idioma "${project.idioma}".
+    const prompt = `Você é um escritor profissional de ebooks. Crie um ebook COMPLETO no idioma "${idioma}", com tom "${tom_voz}".
 
-Dados:
-- Nome: ${project.nome_projeto}
-- Nicho: ${project.nicho}
-- Público-alvo: ${project.publico_alvo}
-- Promessa: ${project.promessa}
-- Quantidade de capítulos: ${project.quantidade_capitulos}
+Tema/Nicho: ${tema}
+Público-alvo: ${publico_alvo}
+Quantidade de capítulos: ${capitulos}
 
 Retorne APENAS JSON válido no schema:
 {
-  "titulo": string,
-  "subtitulo": string,
-  "introducao": string,
-  "sumario": string[],
-  "capitulos": [{ "titulo": string, "conteudo": string }],
-  "conclusao": string,
-  "cta_final": string
+  "title": string,
+  "subtitle": string,
+  "description": string,
+  "summary": string[],
+  "chapters": [{ "title": string, "content": string }],
+  "conclusion": string,
+  "bonus": string
 }
-Cada capítulo deve ter de 400 a 700 palavras em texto corrido, parágrafos separados por \\n\\n.`;
+Cada capítulo deve ter de 500 a 900 palavras em texto corrido, parágrafos separados por \\n\\n. O bônus deve ser uma seção extra acionável.`;
 
-    const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
+        Authorization: `Bearer ${lovableKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "google/gemini-2.5-flash",
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "Você responde APENAS com JSON válido." },
+          { role: "system", content: "Você responde APENAS com JSON válido, sem markdown." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.8,
       }),
     });
 
-    if (!oaiRes.ok) {
-      const t = await oaiRes.text();
-      return json({ error: `OpenAI: ${oaiRes.status} ${t}` }, 500);
+    if (!aiRes.ok) {
+      const t = await aiRes.text();
+      if (aiRes.status === 429) return json({ error: "Limite de uso atingido, tente novamente em alguns minutos." }, 429);
+      if (aiRes.status === 402) return json({ error: "Créditos de IA esgotados na workspace." }, 402);
+      return json({ error: `IA: ${aiRes.status} ${t}` }, 500);
     }
-    const oai = await oaiRes.json();
-    const content = oai.choices?.[0]?.message?.content;
-    if (!content) return json({ error: "Resposta vazia da OpenAI" }, 500);
+    const ai = await aiRes.json();
+    const content = ai.choices?.[0]?.message?.content;
+    if (!content) return json({ error: "Resposta vazia da IA" }, 500);
 
     let ebookData: any;
     try {
       ebookData = JSON.parse(content);
     } catch {
-      return json({ error: "JSON inválido da OpenAI" }, 500);
+      return json({ error: "JSON inválido da IA" }, 500);
     }
 
-    const { data: existing } = await supabase
+    const { data: saved, error: insErr } = await supabase
       .from("ebooks")
-      .select("id")
-      .eq("project_id", projectId)
-      .maybeSingle();
+      .insert({
+        user_id: userId,
+        title: ebookData.title ?? "Ebook sem título",
+        niche: tema,
+        content: { ...ebookData, publico_alvo, idioma, tom_voz },
+      })
+      .select()
+      .single();
+    if (insErr) return json({ error: insErr.message }, 500);
 
-    let saved;
-    if (existing) {
-      const { data, error } = await supabase
-        .from("ebooks")
-        .update({
-          titulo: ebookData.titulo,
-          subtitulo: ebookData.subtitulo,
-          conteudo: ebookData,
-        })
-        .eq("id", existing.id)
-        .select()
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      saved = data;
-    } else {
-      const { data, error } = await supabase
-        .from("ebooks")
-        .insert({
-          project_id: projectId,
-          titulo: ebookData.titulo,
-          subtitulo: ebookData.subtitulo ?? "",
-          conteudo: ebookData,
-        })
-        .select()
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      saved = data;
+    // Debita 1 crédito (service role para bypass do RLS update — não temos política de update)
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (serviceKey) {
+      const admin = createClient(supabaseUrl, serviceKey);
+      await admin.from("user_credits")
+        .update({ credits: creditsRow.credits - 1 })
+        .eq("user_id", userId);
     }
 
     return json({ ebook: saved });
