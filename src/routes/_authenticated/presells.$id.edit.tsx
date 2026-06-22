@@ -8,10 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, Eye, EyeOff, Loader2, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import {
-  PRESELL_LABELS, emptyPresell, renderPresellHtml,
-  type PresellBlockKey, type PresellBlocks, type PresellType,
+  ArrowDown, ArrowLeft, ArrowUp, Check, Copy, ExternalLink, Eye, EyeOff,
+  Loader2, Plus, Save, Trash2, Upload, X,
+} from "lucide-react";
+import {
+  PRESELL_LABELS, DEFAULT_THEME, DEFAULT_DISCLOSURE, emptyPresell, renderPresellHtml, isValidAffiliateUrl,
+  type PresellBlockKey, type PresellBlocks, type PresellType, type PresellTheme,
 } from "@/lib/presell-blocks";
 
 export const Route = createFileRoute("/_authenticated/presells/$id/edit")({
@@ -23,6 +26,8 @@ function EditPresell() {
   const qc = useQueryClient();
   const [blocks, setBlocks] = useState<PresellBlocks | null>(null);
   const [affUrl, setAffUrl] = useState("");
+  const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
+  const [theme, setTheme] = useState<PresellTheme>(DEFAULT_THEME);
   const [saving, setSaving] = useState(false);
 
   const pageQ = useQuery({
@@ -37,16 +42,23 @@ function EditPresell() {
 
   useEffect(() => {
     if (!pageQ.data) return;
-    const b = (pageQ.data as any).blocks as PresellBlocks | null;
-    if (b && b.data) setBlocks(b);
-    else setBlocks(emptyPresell((pageQ.data as any).presell_type as PresellType, (pageQ.data as any).affiliate_url));
-    setAffUrl((pageQ.data as any).affiliate_url || "");
+    const row: any = pageQ.data;
+    const b = row.blocks as PresellBlocks | null;
+    const initial = b && b.data ? b : emptyPresell(row.presell_type as PresellType, row.affiliate_url);
+    // Backfill new optional fields if missing (older records).
+    if (!initial.theme) initial.theme = { ...DEFAULT_THEME };
+    if (!initial.disclosure_text) initial.disclosure_text = row.disclosure_text || DEFAULT_DISCLOSURE;
+    setBlocks(initial);
+    setAffUrl(row.affiliate_url || "");
+    setDisclosure(initial.disclosure_text || DEFAULT_DISCLOSURE);
+    setTheme(initial.theme || DEFAULT_THEME);
   }, [pageQ.data?.id, (pageQ.data as any)?.status]);
 
   if (pageQ.isLoading || !blocks)
     return (<DashboardShell title="Editor"><div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></DashboardShell>);
 
-  const page = pageQ.data!;
+  const page: any = pageQ.data!;
+  const affValid = isValidAffiliateUrl(affUrl);
 
   function update<K extends PresellBlockKey>(key: K, patch: Partial<PresellBlocks["data"][K]>) {
     setBlocks((prev) => prev && ({ ...prev, data: { ...prev.data, [key]: { ...prev.data[key], ...patch } as any } }));
@@ -68,13 +80,17 @@ function EditPresell() {
 
   async function save() {
     if (!blocks) return;
+    if (!affValid) { toast.error("Link de afiliado inválido"); return; }
     setSaving(true);
     try {
-      const b: PresellBlocks = { ...blocks, affiliate_url: affUrl || "#" };
-      const title = b.data.headline.title || (page as any).title;
+      const b: PresellBlocks = { ...blocks, affiliate_url: affUrl, disclosure_text: disclosure, theme };
+      const title = b.data.headline.title || page.title;
       const html = renderPresellHtml(b, title);
       const { error } = await supabase.from("presells")
-        .update({ blocks: b, html_content: html, title, affiliate_url: affUrl || "#" }).eq("id", id);
+        .update({
+          blocks: b, html_content: html, title,
+          affiliate_url: affUrl, disclosure_text: disclosure,
+        }).eq("id", id);
       if (error) throw error;
       toast.success("Presell salva");
       qc.invalidateQueries({ queryKey: ["presell", id] });
@@ -92,15 +108,23 @@ function EditPresell() {
     return signed?.signedUrl ?? null;
   }
 
-  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#" }, (page as any).title);
-  const isProcessing = (page as any).status === "processing";
+  function copyAff() {
+    navigator.clipboard.writeText(affUrl).then(() => toast.success("Link copiado"));
+  }
+  function testAff() {
+    if (!affValid) { toast.error("Link inválido"); return; }
+    window.open(affUrl, "_blank", "noopener,noreferrer");
+  }
+
+  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", disclosure_text: disclosure, theme }, page.title);
+  const isProcessing = page.status === "processing";
 
   return (
-    <DashboardShell title={`Editor — ${(page as any).title}`}>
+    <DashboardShell title={`Editor — ${page.title}`}>
       <div className="mx-auto max-w-7xl">
         <div className="mb-4 flex items-center gap-2">
           <Link to="/presells"><Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button></Link>
-          <a href={`/pre/${(page as any).slug}`} target="_blank" rel="noopener" className="ml-auto">
+          <a href={`/pre/${page.slug}`} target="_blank" rel="noopener" className="ml-auto">
             <Button variant="outline" size="sm"><ExternalLink className="mr-2 h-4 w-4" /> Ver página pública</Button>
           </a>
           <Button onClick={save} disabled={saving} className="bg-gradient-primary text-primary-foreground shadow-glow">
@@ -113,17 +137,41 @@ function EditPresell() {
             <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Gerando conteúdo com IA…
           </div>
         )}
-        {(page as any).status === "failed" && (
+        {page.status === "failed" && (
           <div className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
-            Falha: {(page as any).error_message}
+            Falha: {page.error_message}
           </div>
         )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
           <div className="space-y-3">
+            {/* Affiliate link panel */}
             <div className="rounded-2xl border border-border bg-card p-4">
               <Label>Link de afiliado (usado em todos os CTAs)</Label>
-              <Input value={affUrl} onChange={(e) => setAffUrl(e.target.value)} placeholder="https://..." />
+              <div className="mt-1 flex gap-2">
+                <Input value={affUrl} onChange={(e) => setAffUrl(e.target.value)} placeholder="https://..." />
+                <Button size="icon" variant="outline" onClick={copyAff} title="Copiar"><Copy className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" onClick={testAff} title="Testar"><ExternalLink className="h-4 w-4" /></Button>
+              </div>
+              <div className={`mt-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ${affValid ? "bg-emerald-500/10 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+                {affValid ? <><Check className="h-3 w-3" /> URL válida</> : <><X className="h-3 w-3" /> URL inválida</>}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Parâmetros são preservados. Nada é encurtado ou mascarado.</p>
+            </div>
+
+            {/* Theme */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <Label>Cores principais</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <ColorField label="Primária" value={theme.primary} onChange={(v) => setTheme((t) => ({ ...t, primary: v }))} />
+                <ColorField label="Acento" value={theme.accent} onChange={(v) => setTheme((t) => ({ ...t, accent: v }))} />
+              </div>
+            </div>
+
+            {/* Disclosure */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <Label>Aviso de afiliado (rodapé)</Label>
+              <Textarea rows={2} value={disclosure} onChange={(e) => setDisclosure(e.target.value)} />
             </div>
 
             {blocks.order.map((key) => {
@@ -147,12 +195,24 @@ function EditPresell() {
           </div>
 
           <div className="sticky top-4 h-[calc(100vh-7rem)] overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="border-b border-border bg-surface px-3 py-2 text-xs text-muted-foreground">Pré-visualização</div>
+            <div className="border-b border-border bg-surface px-3 py-2 text-xs text-muted-foreground">Pré-visualização ao vivo</div>
             <iframe srcDoc={previewHtml} className="h-full w-full" title="preview" />
           </div>
         </div>
       </div>
     </DashboardShell>
+  );
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <div className="mt-1 flex items-center gap-2">
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent" />
+        <Input value={value} onChange={(e) => onChange(e.target.value)} className="font-mono text-xs" />
+      </div>
+    </div>
   );
 }
 
@@ -164,11 +224,27 @@ function BlockEditor({ blockKey, block, update, uploadImage }: {
   const [uploading, setUploading] = useState(false);
 
   switch (blockKey) {
+    case "topbar":
+      return <Input value={block.text} onChange={(e) => update({ text: e.target.value })} placeholder="Texto da barra superior" />;
     case "headline":
       return (
         <div className="space-y-2">
           <Input value={block.title} onChange={(e) => update({ title: e.target.value })} placeholder="Título" />
           <Textarea rows={2} value={block.subtitle} onChange={(e) => update({ subtitle: e.target.value })} placeholder="Subtítulo" />
+        </div>
+      );
+    case "rating":
+      return (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-xs">Nota (0-5)</Label>
+            <Input type="number" min={0} max={5} step={0.1} value={block.stars}
+              onChange={(e) => update({ stars: Number(e.target.value) })} />
+          </div>
+          <div>
+            <Label className="text-xs">Rótulo</Label>
+            <Input value={block.label} onChange={(e) => update({ label: e.target.value })} />
+          </div>
         </div>
       );
     case "media":
@@ -189,6 +265,8 @@ function BlockEditor({ blockKey, block, update, uploadImage }: {
             </Button>
             {block.image_url && <Button variant="ghost" size="sm" onClick={() => update({ image_url: "" })}><X className="h-3 w-3" /></Button>}
           </div>
+          <Input value={block.image_url} onChange={(e) => update({ image_url: e.target.value })} placeholder="ou cole uma URL" />
+          <Input value={block.caption || ""} onChange={(e) => update({ caption: e.target.value })} placeholder="Legenda (opcional)" />
         </div>
       );
     case "intro":
@@ -223,6 +301,24 @@ function BlockEditor({ blockKey, block, update, uploadImage }: {
           ))}
           <Button size="sm" variant="outline" onClick={() => update({ items: [...(block.items || []), ""] })}>
             <Plus className="mr-1 h-3 w-3" /> Adicionar
+          </Button>
+        </div>
+      );
+    case "trust_badges":
+      return (
+        <div className="space-y-2">
+          {(block.items || []).map((item: string, i: number) => (
+            <div key={i} className="flex gap-2">
+              <Input value={item} onChange={(e) => {
+                const items = [...block.items]; items[i] = e.target.value; update({ items });
+              }} />
+              <Button size="icon" variant="ghost" onClick={() => update({ items: block.items.filter((_: string, x: number) => x !== i) })}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => update({ items: [...(block.items || []), ""] })}>
+            <Plus className="mr-1 h-3 w-3" /> Selo
           </Button>
         </div>
       );
@@ -280,12 +376,38 @@ function BlockEditor({ blockKey, block, update, uploadImage }: {
           <Input value={block.video_url} onChange={(e) => update({ video_url: e.target.value })} placeholder="URL YouTube/Vimeo" />
         </div>
       );
+    case "faq":
+      return (
+        <div className="space-y-2">
+          <Input value={block.title} onChange={(e) => update({ title: e.target.value })} placeholder="Título" />
+          {(block.items || []).map((it: any, i: number) => (
+            <div key={i} className="space-y-1 rounded border border-border p-2">
+              <Input value={it.q} placeholder="Pergunta" onChange={(e) => {
+                const items = [...block.items]; items[i] = { ...it, q: e.target.value }; update({ items });
+              }} />
+              <Textarea rows={2} value={it.a} placeholder="Resposta" onChange={(e) => {
+                const items = [...block.items]; items[i] = { ...it, a: e.target.value }; update({ items });
+              }} />
+              <Button size="sm" variant="ghost" onClick={() => update({ items: block.items.filter((_: any, x: number) => x !== i) })}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => update({ items: [...(block.items || []), { q: "", a: "" }] })}>
+            <Plus className="mr-1 h-3 w-3" /> Pergunta
+          </Button>
+        </div>
+      );
     case "cta":
       return (
         <div className="space-y-2">
           <Input value={block.text} onChange={(e) => update({ text: e.target.value })} placeholder="Texto do botão" />
           <Textarea rows={2} value={block.note} onChange={(e) => update({ note: e.target.value })} placeholder="Nota abaixo do botão" />
-          <p className="text-xs text-muted-foreground">O link de afiliado é definido no topo. Toda CTA usa esse link.</p>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={block.sticky !== false} onChange={(e) => update({ sticky: e.target.checked })} />
+            Botão flutuante no mobile
+          </label>
+          <p className="text-xs text-muted-foreground">O link de afiliado é configurado no topo. Todo CTA abre em nova aba com rel="sponsored noopener noreferrer".</p>
         </div>
       );
   }

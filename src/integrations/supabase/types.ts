@@ -81,13 +81,17 @@ export type Database = {
         Row: {
           affiliate_url: string
           blocks: Json | null
+          click_count: number
           created_at: string
+          disclosure_text: string | null
           error_message: string | null
+          extracted_data: Json | null
           html_content: string | null
           id: string
           is_published: boolean
           language: string | null
           presell_type: string
+          product_image_url: string | null
           slug: string
           source_url: string | null
           status: string
@@ -99,13 +103,17 @@ export type Database = {
         Insert: {
           affiliate_url?: string
           blocks?: Json | null
+          click_count?: number
           created_at?: string
+          disclosure_text?: string | null
           error_message?: string | null
+          extracted_data?: Json | null
           html_content?: string | null
           id?: string
           is_published?: boolean
           language?: string | null
           presell_type?: string
+          product_image_url?: string | null
           slug: string
           source_url?: string | null
           status?: string
@@ -117,13 +125,17 @@ export type Database = {
         Update: {
           affiliate_url?: string
           blocks?: Json | null
+          click_count?: number
           created_at?: string
+          disclosure_text?: string | null
           error_message?: string | null
+          extracted_data?: Json | null
           html_content?: string | null
           id?: string
           is_published?: boolean
           language?: string | null
           presell_type?: string
+          product_image_url?: string | null
           slug?: string
           source_url?: string | null
           status?: string
@@ -249,7 +261,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_presell_clicks: { Args: { _slug: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
