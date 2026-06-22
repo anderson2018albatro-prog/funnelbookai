@@ -1,6 +1,7 @@
 // Edge Function: generate-presell
-// Generates an ethical presell/bridge page using AI.
-// NEVER drops affiliate cookies. CTA links open in a new tab with rel="sponsored nofollow noopener".
+// Ethical presell generation. Extracts metadata from the official product page,
+// then asks the AI to write an original presell. NEVER fires affiliate cookies,
+// NEVER injects iframes, NEVER auto-redirects. CTAs are real <a> tags only.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -11,13 +12,16 @@ const corsHeaders = {
 const json = (d: unknown, s = 200) =>
   new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+const VALID_TYPES = ["review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice"];
+
+const DEFAULT_DISCLOSURE =
+  "Esta página pode conter links de afiliado. Podemos receber comissão por compras realizadas, sem custo adicional para você.";
+
+const DEFAULT_THEME = { primary: "#6366f1", accent: "#06b6d4", bg: "#ffffff", text: "#0f172a" };
+
 function slugify(s: string) {
   return (s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 60) || "presell");
-}
-function esc(s: string) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
 function stripFences(s: string) {
   let c = s.trim();
@@ -26,154 +30,183 @@ function stripFences(s: string) {
   if (f >= 0 && l > f) c = c.slice(f, l + 1);
   return c;
 }
-
-const VALID_TYPES = ["review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice"];
+function isValidUrl(u: string) {
+  try { const x = new URL(u); return x.protocol === "http:" || x.protocol === "https:"; } catch { return false; }
+}
 
 function defaultOrderFor(type: string): string[] {
   switch (type) {
-    case "advertorial": return ["headline","media","story","what_is","how_it_works","benefits","proof","cta"];
-    case "quiz": return ["headline","quiz","cta"];
-    case "comparativo": return ["headline","comparison","benefits","cta"];
-    case "bridge": return ["headline","benefits","cookie_notice","cta"];
-    case "vsl": return ["headline","video","benefits","cta"];
-    case "cookie_notice": return ["headline","cookie_notice","cta"];
-    default: return ["headline","media","intro","what_is","for_whom","benefits","pros","cons","cta"];
+    case "advertorial": return ["topbar","headline","media","story","what_is","how_it_works","benefits","proof","cta","faq"];
+    case "quiz": return ["topbar","headline","quiz","cta"];
+    case "comparativo": return ["topbar","headline","comparison","benefits","cta","faq"];
+    case "bridge": return ["topbar","headline","benefits","cookie_notice","cta"];
+    case "vsl": return ["topbar","headline","video","benefits","cta","faq"];
+    case "cookie_notice": return ["topbar","headline","cookie_notice","cta"];
+    default: return ["topbar","headline","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","trust_badges","cta","faq"];
   }
 }
 
-function buildBlocks(p: any, type: string, affUrl: string) {
+type Extracted = {
+  title: string; description: string;
+  og_title: string; og_description: string; og_image: string;
+  canonical: string; h1: string; h2: string[];
+  price: string; text: string;
+};
+
+function extractMeta(html: string, base: string): Extracted {
+  const pick = (re: RegExp) => (html.match(re)?.[1] ?? "").trim();
+  const title = pick(/<title[^>]*>([^<]+)<\/title>/i);
+  const description = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+  const og_title = pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+  const og_description = pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+  let og_image = pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+  const canonical = pick(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+  const h1 = pick(/<h1[^>]*>([\s\S]*?)<\/h1>/i).replace(/<[^>]+>/g, "").trim();
+  const h2 = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)]
+    .map((m) => m[1].replace(/<[^>]+>/g, "").trim()).filter(Boolean).slice(0, 8);
+  const price = pick(/(R\$\s?[0-9.,]+|\$\s?[0-9.,]+|€\s?[0-9.,]+)/);
+  if (og_image && !og_image.startsWith("http")) {
+    try { og_image = new URL(og_image, base).toString(); } catch { /* noop */ }
+  }
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ").trim().slice(0, 4000);
+  return { title, description, og_title, og_description, og_image, canonical, h1, h2, price, text };
+}
+
+async function fetchSource(url: string): Promise<{ ok: true; data: Extracted } | { ok: false; reason: string }> {
+  if (!url || !isValidUrl(url)) return { ok: false, reason: "URL inválida" };
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12_000);
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FunnelBookAI/1.0)",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+    });
+    clearTimeout(t);
+    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+    const html = await res.text();
+    return { ok: true, data: extractMeta(html, url) };
+  } catch (e) { return { ok: false, reason: (e as Error).message }; }
+}
+
+function buildBlocks(p: any, type: string, affUrl: string, productImage: string, disclosure: string) {
   return {
-    type, affiliate_url: affUrl || "#", order: defaultOrderFor(type),
+    type, affiliate_url: affUrl,
+    order: defaultOrderFor(type),
+    disclosure_text: disclosure,
+    theme: { ...DEFAULT_THEME },
     data: {
+      topbar: { visible: true, text: p.topbar || "Análise independente" },
       headline: { visible: true, title: p.headline ?? "", subtitle: p.subheadline ?? "" },
-      media: { visible: false, image_url: "" },
+      rating: { visible: type === "review", stars: typeof p.rating === "number" ? p.rating : 4.7, label: p.rating_label || "Nota geral" },
+      media: { visible: !!productImage, image_url: productImage || "", caption: p.media_caption || "" },
       intro: { visible: !!p.intro, text: p.intro ?? "" },
       what_is: { visible: !!p.what_is, title: "O que é", text: p.what_is ?? "" },
       for_whom: { visible: (p.for_whom ?? []).length > 0, title: "Para quem é", items: p.for_whom ?? [] },
-      benefits: { visible: (p.benefits ?? []).length > 0, title: "Benefícios", items: p.benefits ?? [] },
+      benefits: { visible: (p.benefits ?? []).length > 0, title: "Principais benefícios", items: p.benefits ?? [] },
       pros: { visible: (p.pros ?? []).length > 0, title: "Pontos positivos", items: p.pros ?? [] },
       cons: { visible: (p.cons ?? []).length > 0, title: "Pontos de atenção", items: p.cons ?? [] },
-      story: { visible: !!p.story, title: "História", text: p.story ?? "" },
+      story: { visible: !!p.story, title: "A história", text: p.story ?? "" },
       how_it_works: { visible: !!p.how_it_works, title: "Como funciona", text: p.how_it_works ?? "" },
-      proof: { visible: (p.proof ?? []).length > 0, title: "Provas", items: p.proof ?? [] },
+      proof: { visible: (p.proof ?? []).length > 0, title: "Provas e argumentos", items: p.proof ?? [] },
+      trust_badges: {
+        visible: (p.trust_badges ?? []).length > 0,
+        items: p.trust_badges ?? ["Compra 100% segura", "Garantia oficial", "Suporte do fabricante"],
+      },
       comparison: {
         visible: !!p.comparison, title: "Comparativo",
-        product_a: p.comparison?.product_a ?? "", product_b: p.comparison?.product_b ?? "",
-        rows: p.comparison?.rows ?? [], winner: p.comparison?.winner ?? "",
+        product_a: p.comparison?.product_a ?? "Oficial",
+        product_b: p.comparison?.product_b ?? "Alternativa",
+        rows: p.comparison?.rows ?? [],
+        winner: p.comparison?.winner ?? "",
       },
       quiz: {
         visible: (p.quiz?.questions ?? []).length > 0,
         title: p.quiz?.title ?? "Descubra a melhor opção",
         questions: p.quiz?.questions ?? [], result: p.quiz?.result ?? "",
       },
-      video: { visible: type === "vsl", title: "Assista", video_url: "" },
+      video: { visible: type === "vsl", title: p.video_title ?? "Assista", video_url: p.video_url ?? "" },
       cookie_notice: {
-        visible: true,
-        text: p.cookie_notice ?? "Aviso: ao clicar no botão você será redirecionado para o site oficial. Nenhum cookie de afiliado é definido até você clicar.",
+        visible: type === "bridge" || type === "cookie_notice",
+        text: p.cookie_notice ?? "Ao clicar no botão você será redirecionado para o site oficial. Nenhum cookie é definido antes do clique.",
       },
       cta: {
         visible: true,
         text: p.cta_text ?? "Acessar site oficial",
-        note: "Você será redirecionado para o site oficial do produto.",
+        note: p.cta_note ?? "Você será redirecionado para o site oficial do produto.",
+        sticky: true,
+      },
+      faq: {
+        visible: (p.faq ?? []).length > 0,
+        title: "Perguntas frequentes",
+        items: p.faq ?? [],
       },
     },
   };
 }
 
-function renderHtml(blocks: any, fallbackTitle: string): string {
-  const d = blocks.data, aff = blocks.affiliate_url || "#";
-  const order: string[] = blocks.order;
-  const cta = (label: string) =>
-    `<a class="cta" href="${esc(aff)}" target="_blank" rel="sponsored nofollow noopener">${esc(label)}</a>`;
-  const ul = (items: string[]) => (items || []).filter(Boolean).map((b) => `<li>${esc(b)}</li>`).join("");
-  const sec: string[] = [];
-  for (const key of order) {
-    const b: any = d[key]; if (!b || !b.visible) continue;
-    switch (key) {
-      case "headline":
-        sec.push(`<header class="hero"><h1>${esc(b.title)}</h1>${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ""}</header>`); break;
-      case "intro": if (b.text) sec.push(`<section class="wrap"><p class="lead">${esc(b.text)}</p></section>`); break;
-      case "what_is": case "story": case "how_it_works":
-        if (b.text) sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><p>${esc(b.text)}</p></section>`); break;
-      case "for_whom": case "benefits": case "pros": case "cons": case "proof":
-        if (b.items?.length) sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><ul class="feat">${ul(b.items)}</ul></section>`); break;
-      case "comparison": {
-        const rows = (b.rows || []).map((r: any) => `<tr><td>${esc(r.feature)}</td><td>${esc(r.a)}</td><td>${esc(r.b)}</td></tr>`).join("");
-        sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><table class="cmp"><thead><tr><th></th><th>${esc(b.product_a)}</th><th>${esc(b.product_b)}</th></tr></thead><tbody>${rows}</tbody></table>${b.winner ? `<p><strong>Melhor opção:</strong> ${esc(b.winner)}</p>` : ""}</section>`); break;
-      }
-      case "quiz": {
-        const qs = (b.questions || []).map((q: any, i: number) => `<div class="q"><h3>${i + 1}. ${esc(q.question)}</h3><ul>${(q.options || []).map((o: string) => `<li>${esc(o)}</li>`).join("")}</ul></div>`).join("");
-        sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2>${qs}${b.result ? `<div class="result"><strong>Recomendação:</strong> ${esc(b.result)}</div>` : ""}</section>`); break;
-      }
-      case "cookie_notice": if (b.text) sec.push(`<section class="wrap"><div class="notice">${esc(b.text)}</div></section>`); break;
-      case "cta":
-        sec.push(`<section class="wrap final">${cta(b.text || "Acessar site oficial")}${b.note ? `<p class="note">${esc(b.note)}</p>` : ""}</section>`); break;
-    }
-  }
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${esc(d.headline?.title || fallbackTitle)}</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;line-height:1.6;color:#0f172a;background:#fff}
-.wrap{max-width:780px;margin:0 auto;padding:32px 16px}
-.hero{background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;padding:56px 16px;text-align:center}
-.hero h1{font-size:clamp(26px,4.5vw,44px);font-weight:800}.hero p{margin-top:14px;font-size:18px;opacity:.95}
-h2{font-size:clamp(20px,2.6vw,28px);margin-bottom:14px}.lead{font-size:18px;color:#334155}
-ul.feat{list-style:none;display:grid;gap:10px}ul.feat li{background:#f1f5f9;padding:12px 16px;border-radius:10px;border-left:4px solid #6366f1}
-.cmp{width:100%;border-collapse:collapse}.cmp th,.cmp td{padding:10px;border:1px solid #e2e8f0;text-align:left}.cmp th{background:#f8fafc}
-.q{background:#f8fafc;padding:14px;border-radius:10px;margin-bottom:10px}.q ul{margin-top:6px;padding-left:18px}
-.result{background:#ecfdf5;border:1px solid #10b981;padding:14px;border-radius:10px;margin-top:10px}
-.notice{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:14px 16px;border-radius:10px;font-size:14px}
-.final{text-align:center}.cta{display:inline-block;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;font-weight:700;padding:16px 36px;border-radius:12px;text-decoration:none}
-.note{margin-top:14px;color:#64748b;font-size:13px}
-footer{padding:24px;text-align:center;color:#64748b;font-size:12px}</style></head><body>
-${sec.join("\n")}
-<footer>Página de recomendação. Ao clicar no botão você é redirecionado para o site oficial. Podemos receber comissão por compras realizadas.</footer></body></html>`;
-}
-
-async function fetchSourceInfo(url: string): Promise<{ title: string; description: string; text: string } | null> {
-  if (!url) return null;
-  try {
-    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (FunnelBookAI Presell Bot)" } });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const title = (html.match(/<title>([^<]+)<\/title>/i)?.[1] ?? "").trim();
-    const desc = (html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? "").trim();
-    const ogd = (html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? "").trim();
-    const stripped = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 4000);
-    return { title, description: desc || ogd, text: stripped };
-  } catch { return null; }
-}
-
 async function processBg(opts: {
   admin: ReturnType<typeof createClient>; lovableKey: string; presellId: string;
   source_url: string; affiliate_url: string; presell_type: string;
-  niche: string; target_audience: string; tone: string; language: string; extra_prompt: string;
+  niche: string; target_audience: string; tone: string; language: string;
+  extra_prompt: string; manual_info: string;
 }) {
-  const { admin, lovableKey, presellId, source_url, affiliate_url, presell_type, niche, target_audience, tone, language, extra_prompt } = opts;
+  const { admin, lovableKey, presellId, source_url, affiliate_url, presell_type,
+    niche, target_audience, tone, language, extra_prompt, manual_info } = opts;
   try {
-    const info = await fetchSourceInfo(source_url);
-    const ctx = `Tipo de presell: ${presell_type}
+    const fetched = source_url ? await fetchSource(source_url) : { ok: false as const, reason: "Sem URL" };
+    const info: Extracted | null = fetched.ok ? fetched.data : null;
+    const fetchError = fetched.ok ? null : fetched.reason;
+
+    const productImage = info?.og_image ?? "";
+
+    const ctx = `Tipo: ${presell_type}
 Nicho: ${niche}
 Público-alvo: ${target_audience}
-Tom de voz: ${tone}
+Tom: ${tone}
 Idioma: ${language || "pt-BR"}
-Link de afiliado (NÃO incluir no conteúdo, será aplicado no CTA): ${affiliate_url}
-Link da página/produto: ${source_url || "(não informado)"}
-Informações extraídas do link: ${info ? `Título: ${info.title}\nDescrição: ${info.description}\nTrecho: ${info.text.slice(0, 1500)}` : "(não foi possível ler)"}
-Comando extra: ${extra_prompt}`;
+
+Página oficial: ${source_url || "(não informada)"}
+${info ? `Dados extraídos:
+- Título: ${info.title}
+- Descrição: ${info.description}
+- OG Title: ${info.og_title}
+- OG Description: ${info.og_description}
+- Canonical: ${info.canonical}
+- H1: ${info.h1}
+- H2s: ${info.h2.join(" | ")}
+- Preço visível: ${info.price}
+- Trecho da página: ${info.text.slice(0, 1500)}` : `Não foi possível ler a página oficial${fetchError ? ` (${fetchError})` : ""}.`}
+${manual_info ? `\nInformações fornecidas pelo usuário:\n${manual_info}` : ""}
+
+Comando extra: ${extra_prompt || "(nenhum)"}`;
+
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "Você é copywriter especialista em presells éticas para afiliados. Responda APENAS com JSON válido, sem markdown. NUNCA promova cookie stuffing. O CTA sempre depende do clique do usuário." },
-          { role: "user", content: `Crie uma presell (tipo ${presell_type}) com base em:
+          { role: "system", content:
+            "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, persuasivo e mobile-first. NUNCA copie literalmente textos da página oficial — use como referência. NUNCA recomende cookie stuffing, redirecionamento invisível ou cookie antes do clique. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown e sem cercas." },
+          { role: "user", content: `Crie uma presell premium (tipo "${presell_type}") com base no contexto abaixo. Gere texto original e persuasivo, com headline forte e benefícios claros.
+
 ${ctx}
 
-Retorne JSON com os campos relevantes para o tipo:
+Retorne JSON com:
 {
+ "topbar": string,
  "headline": string,
  "subheadline": string,
+ "rating": number (0-5, apenas para review),
+ "rating_label": string,
+ "media_caption": string,
  "intro": string,
  "what_is": string,
  "for_whom": string[],
@@ -183,10 +216,15 @@ Retorne JSON com os campos relevantes para o tipo:
  "story": string,
  "how_it_works": string,
  "proof": string[],
+ "trust_badges": string[],
  "comparison": {"product_a":string,"product_b":string,"rows":[{"feature":string,"a":string,"b":string}],"winner":string} | null,
  "quiz": {"title":string,"questions":[{"question":string,"options":string[]}],"result":string} | null,
+ "video_title": string,
+ "video_url": string,
  "cookie_notice": string,
- "cta_text": string
+ "cta_text": string,
+ "cta_note": string,
+ "faq": [{"q":string,"a":string}]
 }` },
         ],
       }),
@@ -196,11 +234,16 @@ Retorne JSON com os campos relevantes para o tipo:
     const raw = ai.choices?.[0]?.message?.content ?? "";
     if (!raw) throw new Error("Resposta vazia da IA");
     const p = JSON.parse(stripFences(raw));
-    const blocks = buildBlocks(p, presell_type, affiliate_url);
-    const title = p.headline || info?.title || "Presell";
-    const html = renderHtml(blocks, title);
-    const { error } = await admin.from("presells")
-      .update({ title, blocks, html_content: html, status: "completed", error_message: null }).eq("id", presellId);
+
+    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE);
+    const title = p.headline || info?.og_title || info?.title || "Presell";
+
+    const { error } = await admin.from("presells").update({
+      title, blocks, status: "completed", error_message: null,
+      extracted_data: info ?? { _error: fetchError },
+      product_image_url: productImage || null,
+      disclosure_text: DEFAULT_DISCLOSURE,
+    }).eq("id", presellId);
     if (error) throw new Error(error.message);
   } catch (e) {
     const msg = (e as Error).message ?? "Falha";
@@ -227,11 +270,17 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     let { source_url = "", affiliate_url = "", presell_type = "review",
-      niche = "", target_audience = "", tone = "", language = "pt-BR", extra_prompt = "" } = body;
+      niche = "", target_audience = "", tone = "", language = "pt-BR",
+      extra_prompt = "", manual_info = "" } = body;
+
+    affiliate_url = String(affiliate_url || "").trim();
     if (!affiliate_url) return json({ error: "Informe o link de afiliado" }, 400);
+    if (!isValidUrl(affiliate_url)) return json({ error: "Link de afiliado inválido. Use http(s)://" }, 400);
+    if (source_url && !isValidUrl(source_url)) return json({ error: "Link da página oficial inválido" }, 400);
     if (!VALID_TYPES.includes(presell_type)) presell_type = "review";
 
-    const base = slugify((source_url ? new URL(source_url).hostname.replace(/^www\./, "") : "") + "-" + presell_type);
+    const hostBase = source_url ? (() => { try { return new URL(source_url).hostname.replace(/^www\./, ""); } catch { return ""; } })() : "";
+    const base = slugify(`${hostBase || presell_type}-${presell_type}`);
     let slug = base, n = 0;
     while (true) {
       const { data: ex } = await admin.from("presells").select("id").eq("slug", slug).maybeSingle();
@@ -243,13 +292,15 @@ Deno.serve(async (req) => {
       user_id: userId, title: "Presell em geração", slug,
       source_url, affiliate_url, presell_type, tone, language,
       status: "processing", is_published: true,
+      disclosure_text: DEFAULT_DISCLOSURE,
     }).select("id").single();
     if (insErr) return json({ error: insErr.message }, 500);
 
-    // @ts-ignore
+    // @ts-ignore EdgeRuntime
     EdgeRuntime.waitUntil(processBg({
       admin, lovableKey, presellId: created.id,
-      source_url, affiliate_url, presell_type, niche, target_audience, tone, language, extra_prompt,
+      source_url, affiliate_url, presell_type, niche, target_audience, tone, language,
+      extra_prompt, manual_info,
     }));
 
     return json({ presellId: created.id, slug, status: "processing" }, 202);

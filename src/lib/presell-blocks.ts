@@ -1,41 +1,33 @@
 // Presell / Bridge page blocks: types and HTML renderer.
-// Ethical presells only: NO cookie stuffing, NO invisible redirects.
-// All affiliate clicks require an explicit user click on a CTA.
+// Ethical only: NO cookie stuffing, NO invisible redirects, NO auto-fired affiliate links.
+// Every CTA is a real anchor with target="_blank" rel="sponsored noopener noreferrer".
 
 export type PresellType =
-  | "review"
-  | "advertorial"
-  | "quiz"
-  | "comparativo"
-  | "bridge"
-  | "vsl"
-  | "cookie_notice";
+  | "review" | "advertorial" | "quiz" | "comparativo" | "bridge" | "vsl" | "cookie_notice";
 
 export type PresellBlockKey =
-  | "headline"
-  | "media"
-  | "intro"
-  | "what_is"
-  | "for_whom"
-  | "benefits"
-  | "pros"
-  | "cons"
-  | "story"
-  | "how_it_works"
-  | "proof"
-  | "comparison"
-  | "quiz"
-  | "video"
-  | "cookie_notice"
-  | "cta";
+  | "topbar" | "headline" | "rating" | "media" | "intro" | "what_is" | "for_whom"
+  | "benefits" | "pros" | "cons" | "story" | "how_it_works" | "proof" | "trust_badges"
+  | "comparison" | "quiz" | "video" | "cookie_notice" | "cta" | "faq";
+
+export type PresellTheme = {
+  primary: string;        // hex, e.g. #6366f1
+  accent: string;
+  bg: string;
+  text: string;
+};
 
 export type PresellBlocks = {
   type: PresellType;
   order: PresellBlockKey[];
   affiliate_url: string;
+  disclosure_text: string;
+  theme: PresellTheme;
   data: {
+    topbar: { visible: boolean; text: string };
     headline: { visible: boolean; title: string; subtitle: string };
-    media: { visible: boolean; image_url: string };
+    rating: { visible: boolean; stars: number; label: string };
+    media: { visible: boolean; image_url: string; caption: string };
     intro: { visible: boolean; text: string };
     what_is: { visible: boolean; title: string; text: string };
     for_whom: { visible: boolean; title: string; items: string[] };
@@ -45,29 +37,30 @@ export type PresellBlocks = {
     story: { visible: boolean; title: string; text: string };
     how_it_works: { visible: boolean; title: string; text: string };
     proof: { visible: boolean; title: string; items: string[] };
+    trust_badges: { visible: boolean; items: string[] };
     comparison: {
-      visible: boolean;
-      title: string;
-      product_a: string;
-      product_b: string;
+      visible: boolean; title: string;
+      product_a: string; product_b: string;
       rows: { feature: string; a: string; b: string }[];
       winner: string;
     };
     quiz: {
-      visible: boolean;
-      title: string;
+      visible: boolean; title: string;
       questions: { question: string; options: string[] }[];
       result: string;
     };
     video: { visible: boolean; title: string; video_url: string };
     cookie_notice: { visible: boolean; text: string };
-    cta: { visible: boolean; text: string; note: string };
+    cta: { visible: boolean; text: string; note: string; sticky: boolean };
+    faq: { visible: boolean; title: string; items: { q: string; a: string }[] };
   };
 };
 
 export const PRESELL_LABELS: Record<PresellBlockKey, string> = {
+  topbar: "Barra superior",
   headline: "Headline",
-  media: "Imagem",
+  rating: "Avaliação / nota",
+  media: "Imagem do produto",
   intro: "Introdução",
   what_is: "O que é o produto",
   for_whom: "Para quem é",
@@ -77,39 +70,51 @@ export const PRESELL_LABELS: Record<PresellBlockKey, string> = {
   story: "História / problema",
   how_it_works: "Como funciona",
   proof: "Prova / argumentos",
+  trust_badges: "Selos de confiança",
   comparison: "Comparativo",
   quiz: "Quiz",
   video: "Vídeo",
-  cookie_notice: "Aviso de cookies / redirecionamento",
+  cookie_notice: "Aviso de redirecionamento",
   cta: "Botão CTA",
+  faq: "FAQ",
 };
 
 export const PRESELL_TYPE_LABELS: Record<PresellType, string> = {
-  review: "Review / Análise",
+  review: "Review Premium",
   advertorial: "Advertorial (matéria)",
   quiz: "Quiz Presell",
   comparativo: "Comparativo",
-  bridge: "Bridge Page simples",
+  bridge: "Bridge Page direta",
   vsl: "VSL Presell",
-  cookie_notice: "Página com aviso de cookies",
+  cookie_notice: "Aviso de redirecionamento",
 };
+
+export const DEFAULT_THEME: PresellTheme = {
+  primary: "#6366f1",
+  accent: "#06b6d4",
+  bg: "#ffffff",
+  text: "#0f172a",
+};
+
+export const DEFAULT_DISCLOSURE =
+  "Esta página pode conter links de afiliado. Podemos receber comissão por compras realizadas, sem custo adicional para você.";
 
 export function defaultOrderFor(type: PresellType): PresellBlockKey[] {
   switch (type) {
     case "review":
-      return ["headline", "media", "intro", "what_is", "for_whom", "benefits", "pros", "cons", "cta"];
+      return ["topbar","headline","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","trust_badges","cta","faq"];
     case "advertorial":
-      return ["headline", "media", "story", "what_is", "how_it_works", "benefits", "proof", "cta"];
+      return ["topbar","headline","media","story","what_is","how_it_works","benefits","proof","cta","faq"];
     case "quiz":
-      return ["headline", "quiz", "cta"];
+      return ["topbar","headline","quiz","cta"];
     case "comparativo":
-      return ["headline", "comparison", "benefits", "cta"];
+      return ["topbar","headline","comparison","benefits","cta","faq"];
     case "bridge":
-      return ["headline", "benefits", "cookie_notice", "cta"];
+      return ["topbar","headline","benefits","cookie_notice","cta"];
     case "vsl":
-      return ["headline", "video", "benefits", "cta"];
+      return ["topbar","headline","video","benefits","cta","faq"];
     case "cookie_notice":
-      return ["headline", "cookie_notice", "cta"];
+      return ["topbar","headline","cookie_notice","cta"];
   }
 }
 
@@ -118,26 +123,32 @@ export function emptyPresell(type: PresellType, affiliateUrl: string): PresellBl
     type,
     order: defaultOrderFor(type),
     affiliate_url: affiliateUrl || "#",
+    disclosure_text: DEFAULT_DISCLOSURE,
+    theme: { ...DEFAULT_THEME },
     data: {
+      topbar: { visible: true, text: "Análise independente" },
       headline: { visible: true, title: "", subtitle: "" },
-      media: { visible: false, image_url: "" },
+      rating: { visible: type === "review", stars: 4.7, label: "Nota geral" },
+      media: { visible: false, image_url: "", caption: "" },
       intro: { visible: true, text: "" },
       what_is: { visible: true, title: "O que é", text: "" },
       for_whom: { visible: true, title: "Para quem é", items: [] },
       benefits: { visible: true, title: "Benefícios", items: [] },
       pros: { visible: true, title: "Pontos positivos", items: [] },
       cons: { visible: true, title: "Pontos de atenção", items: [] },
-      story: { visible: true, title: "História", text: "" },
+      story: { visible: true, title: "A história", text: "" },
       how_it_works: { visible: true, title: "Como funciona", text: "" },
-      proof: { visible: true, title: "Provas", items: [] },
-      comparison: { visible: true, title: "Comparativo", product_a: "Produto A", product_b: "Produto B", rows: [], winner: "" },
-      quiz: { visible: true, title: "Descubra a solução ideal", questions: [], result: "" },
-      video: { visible: true, title: "Assista ao vídeo", video_url: "" },
+      proof: { visible: true, title: "Provas / argumentos", items: [] },
+      trust_badges: { visible: false, items: ["Compra 100% segura", "Garantia oficial", "Suporte do fabricante"] },
+      comparison: { visible: true, title: "Comparativo", product_a: "Oficial", product_b: "Alternativa", rows: [], winner: "" },
+      quiz: { visible: true, title: "Descubra a melhor opção", questions: [], result: "" },
+      video: { visible: true, title: "Assista", video_url: "" },
       cookie_notice: {
         visible: true,
-        text: "Aviso: ao clicar no botão você será redirecionado para o site oficial do produto. Nenhum cookie de afiliado é definido até você clicar.",
+        text: "Ao clicar no botão você será redirecionado para o site oficial do produto. Nenhum cookie é definido antes do seu clique.",
       },
-      cta: { visible: true, text: "Acessar site oficial", note: "Você será redirecionado para a página oficial do produto." },
+      cta: { visible: true, text: "Acessar site oficial", note: "Você será redirecionado para o site oficial do produto.", sticky: true },
+      faq: { visible: true, title: "Perguntas frequentes", items: [] },
     },
   };
 }
@@ -167,79 +178,140 @@ function embedUrl(url: string): string | null {
 const ul = (items: string[]) =>
   (items || []).filter(Boolean).map((b) => `<li>${esc(b)}</li>`).join("");
 
+function starsHtml(score: number): string {
+  const full = Math.floor(score);
+  const half = score - full >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  return "★".repeat(full) + (half ? "☆" : "") + "✩".repeat(empty);
+}
+
+export function isValidAffiliateUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch { return false; }
+}
+
 export function renderPresellHtml(blocks: PresellBlocks, fallbackTitle: string): string {
   const d = blocks.data;
   const aff = blocks.affiliate_url || "#";
+  const theme = blocks.theme ?? DEFAULT_THEME;
   const order = blocks.order ?? defaultOrderFor(blocks.type);
+  const disclosure = blocks.disclosure_text || DEFAULT_DISCLOSURE;
   const sec: string[] = [];
 
-  // CTA anchor (rel="sponsored nofollow noopener" — ethical affiliate link)
-  const ctaButton = (label: string) =>
-    `<a class="cta" href="${esc(aff)}" target="_blank" rel="sponsored nofollow noopener">${esc(label)}</a>`;
+  // Every CTA: real anchor, opens in new tab, rel="sponsored noopener noreferrer". data-cta marks it for click tracking.
+  const ctaButton = (label: string, variant: "primary" | "large" = "primary") =>
+    `<a class="cta cta-${variant}" data-cta="1" href="${esc(aff)}" target="_blank" rel="sponsored noopener noreferrer">${esc(label)} <span aria-hidden="true">→</span></a>`;
+
+  let altBg = false;
+  const section = (inner: string, opts: { wrap?: boolean; hero?: boolean; padded?: boolean } = {}) => {
+    if (opts.hero) return `<header class="hero">${inner}</header>`;
+    const bg = altBg ? "alt" : "";
+    altBg = !altBg;
+    return `<section class="band ${bg}"><div class="${opts.wrap === false ? "" : "wrap"}">${inner}</div></section>`;
+  };
 
   for (const key of order) {
     const b: any = (d as any)[key];
     if (!b || b.visible === false) continue;
     switch (key) {
+      case "topbar":
+        if (b.text) sec.push(`<div class="topbar">${esc(b.text)}</div>`);
+        break;
       case "headline":
-        sec.push(`<header class="hero">
-  <h1>${esc(b.title)}</h1>
-  ${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ""}
-</header>`);
+        sec.push(section(
+          `<h1>${esc(b.title || fallbackTitle)}</h1>${b.subtitle ? `<p class="sub">${esc(b.subtitle)}</p>` : ""}
+${ctaButton(d.cta.text || "Ver oferta oficial", "large")}`,
+          { hero: true }
+        ));
+        break;
+      case "rating":
+        sec.push(section(
+          `<div class="rating"><div class="stars">${starsHtml(b.stars || 0)}</div><div class="rscore">${(b.stars || 0).toFixed(1)} / 5</div><div class="rlabel">${esc(b.label || "")}</div></div>`
+        ));
         break;
       case "media":
         if (b.image_url)
-          sec.push(`<section class="wrap"><img class="media" src="${esc(b.image_url)}" alt="${esc(fallbackTitle)}" /></section>`);
+          sec.push(section(
+            `<figure class="figure"><img class="media" src="${esc(b.image_url)}" alt="${esc(fallbackTitle)}" loading="lazy" />${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ""}</figure>`
+          ));
         break;
       case "intro":
-        if (b.text) sec.push(`<section class="wrap"><p class="lead">${esc(b.text)}</p></section>`);
+        if (b.text) sec.push(section(`<p class="lead">${esc(b.text)}</p>`));
         break;
       case "what_is":
       case "story":
       case "how_it_works":
-        if (b.text) sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><p>${esc(b.text)}</p></section>`);
+        if (b.text)
+          sec.push(section(`<h2>${esc(b.title)}</h2><p class="prose">${esc(b.text)}</p>`));
         break;
       case "for_whom":
       case "benefits":
-      case "pros":
-      case "cons":
       case "proof":
         if (b.items?.length)
-          sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><ul class="feat">${ul(b.items)}</ul></section>`);
+          sec.push(section(`<h2>${esc(b.title)}</h2><ul class="cards">${ul(b.items)}</ul>`));
+        break;
+      case "pros":
+        if (b.items?.length)
+          sec.push(section(`<h2>${esc(b.title)}</h2><ul class="pros">${ul(b.items)}</ul>`));
+        break;
+      case "cons":
+        if (b.items?.length)
+          sec.push(section(`<h2>${esc(b.title)}</h2><ul class="cons">${ul(b.items)}</ul>`));
+        break;
+      case "trust_badges":
+        if (b.items?.length)
+          sec.push(section(
+            `<div class="badges">${b.items.map((x: string) => `<span class="badge">✓ ${esc(x)}</span>`).join("")}</div>`
+          ));
         break;
       case "comparison": {
         const rows = (b.rows || []).map(
           (r: any) => `<tr><td>${esc(r.feature)}</td><td>${esc(r.a)}</td><td>${esc(r.b)}</td></tr>`).join("");
-        sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2>
-  <table class="cmp"><thead><tr><th></th><th>${esc(b.product_a)}</th><th>${esc(b.product_b)}</th></tr></thead>
-  <tbody>${rows}</tbody></table>
-  ${b.winner ? `<p class="winner"><strong>Melhor opção:</strong> ${esc(b.winner)}</p>` : ""}
-  </section>`);
+        sec.push(section(
+          `<h2>${esc(b.title)}</h2>
+<div class="tablewrap"><table class="cmp"><thead><tr><th></th><th>${esc(b.product_a)}</th><th>${esc(b.product_b)}</th></tr></thead><tbody>${rows}</tbody></table></div>
+${b.winner ? `<p class="winner"><strong>Recomendado:</strong> ${esc(b.winner)}</p>` : ""}`
+        ));
         break;
       }
       case "quiz": {
         const qs = (b.questions || []).map((q: any, i: number) =>
           `<div class="q"><h3>${i + 1}. ${esc(q.question)}</h3><ul>${(q.options || []).map((o: string) => `<li>${esc(o)}</li>`).join("")}</ul></div>`).join("");
-        sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2>${qs}
-  ${b.result ? `<div class="result"><strong>Recomendação:</strong> ${esc(b.result)}</div>` : ""}</section>`);
+        sec.push(section(
+          `<h2>${esc(b.title)}</h2>${qs}${b.result ? `<div class="result"><strong>Recomendação:</strong> ${esc(b.result)}</div>` : ""}`
+        ));
         break;
       }
       case "video": {
         const em = embedUrl(b.video_url);
-        if (em) sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><div class="video"><iframe src="${esc(em)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div></section>`);
+        if (em) sec.push(section(
+          `<h2>${esc(b.title)}</h2><div class="video"><iframe src="${esc(em)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`
+        ));
         break;
       }
       case "cookie_notice":
-        if (b.text) sec.push(`<section class="wrap"><div class="notice">${esc(b.text)}</div></section>`);
+        if (b.text) sec.push(section(`<div class="notice">${esc(b.text)}</div>`));
+        break;
+      case "faq":
+        if (b.items?.length) sec.push(section(
+          `<h2>${esc(b.title)}</h2>${b.items.map((it: any) =>
+            `<details class="faq"><summary>${esc(it.q)}</summary><p>${esc(it.a)}</p></details>`).join("")}`
+        ));
         break;
       case "cta":
-        sec.push(`<section class="wrap final" id="cta-final">
-  ${ctaButton(b.text || "Acessar site oficial")}
-  ${b.note ? `<p class="note">${esc(b.note)}</p>` : ""}
-</section>`);
+        sec.push(section(
+          `<div class="finalcta">${ctaButton(b.text || "Acessar site oficial", "large")}${b.note ? `<p class="note">${esc(b.note)}</p>` : ""}</div>`
+        ));
         break;
     }
   }
+
+  const stickyCta = d.cta.sticky !== false
+    ? `<div class="sticky-cta"><a class="cta cta-sticky" data-cta="1" href="${esc(aff)}" target="_blank" rel="sponsored noopener noreferrer">${esc(d.cta.text || "Acessar site oficial")}</a></div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head>
@@ -247,35 +319,82 @@ export function renderPresellHtml(blocks: PresellBlocks, fallbackTitle: string):
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>${esc(d.headline?.title || fallbackTitle)}</title>
 <meta name="description" content="${esc(d.headline?.subtitle || "")}" />
+<meta name="robots" content="index,follow" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
+:root{
+  --p:${theme.primary};--a:${theme.accent};--bg:${theme.bg};--fg:${theme.text};
+  --muted:#64748b;--surface:#f8fafc;--surface2:#f1f5f9;--border:#e2e8f0;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;line-height:1.6;color:#0f172a;background:#fff}
-.wrap{max-width:780px;margin:0 auto;padding:32px 16px}
-.hero{background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;padding:56px 16px;text-align:center}
-.hero h1{font-size:clamp(26px,4.5vw,44px);font-weight:800;max-width:780px;margin:0 auto}
-.hero p{font-size:clamp(15px,2.2vw,19px);opacity:.95;margin-top:14px}
-h2{font-size:clamp(20px,2.6vw,28px);margin-bottom:14px}
-.lead{font-size:18px;color:#334155}
-.media{max-width:100%;border-radius:14px;display:block;margin:0 auto;box-shadow:0 8px 24px rgba(0,0,0,.12)}
-ul.feat{list-style:none;display:grid;gap:10px}
-ul.feat li{background:#f1f5f9;padding:12px 16px;border-radius:10px;border-left:4px solid #6366f1}
-.cmp{width:100%;border-collapse:collapse;margin-top:8px}
-.cmp th,.cmp td{padding:10px;border:1px solid #e2e8f0;text-align:left}
-.cmp th{background:#f8fafc}
-.winner{margin-top:12px}
-.q{background:#f8fafc;padding:14px;border-radius:10px;margin-bottom:10px}
-.q ul{margin-top:6px;padding-left:18px}
-.result{background:#ecfdf5;border:1px solid #10b981;padding:14px;border-radius:10px;margin-top:10px}
-.video{width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.65;color:var(--fg);background:var(--bg);padding-bottom:88px}
+img{max-width:100%;display:block}
+.topbar{background:var(--fg);color:#fff;text-align:center;font-size:13px;padding:8px 16px;letter-spacing:.3px;text-transform:uppercase;font-weight:600}
+.hero{background:linear-gradient(135deg,var(--p),var(--a));color:#fff;padding:64px 20px 72px;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.15),transparent 50%);pointer-events:none}
+.hero h1{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(30px,5.5vw,52px);font-weight:800;line-height:1.15;max-width:820px;margin:0 auto;letter-spacing:-.02em}
+.hero .sub{font-size:clamp(16px,2.4vw,20px);opacity:.95;margin:18px auto 0;max-width:680px}
+.band{padding:48px 20px}
+.band.alt{background:var(--surface)}
+.wrap{max-width:880px;margin:0 auto}
+h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(24px,3.4vw,34px);margin-bottom:22px;letter-spacing:-.015em;line-height:1.2}
+.prose{font-size:17px;color:#334155;max-width:760px}
+.lead{font-size:20px;color:#334155;font-weight:500;text-align:center;max-width:720px;margin:0 auto}
+.figure{margin:0 auto;max-width:560px;text-align:center}
+.media{border-radius:18px;box-shadow:0 12px 40px rgba(15,23,42,.12);margin:0 auto}
+figcaption{margin-top:10px;font-size:13px;color:var(--muted)}
+.rating{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px}
+.stars{font-size:32px;color:#f59e0b;letter-spacing:4px}
+.rscore{font-size:22px;font-weight:700}
+.rlabel{color:var(--muted);font-size:14px}
+.cards{list-style:none;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.cards li{background:#fff;border:1px solid var(--border);padding:18px 20px;border-radius:14px;font-weight:500;position:relative;padding-left:48px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.cards li::before{content:"✓";position:absolute;left:16px;top:18px;width:24px;height:24px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.pros,.cons{list-style:none;display:grid;gap:10px}
+.pros li,.cons li{background:#fff;border-left:4px solid;padding:14px 18px;border-radius:10px;font-weight:500}
+.pros li{border-color:#10b981;background:#ecfdf5}
+.cons li{border-color:#f59e0b;background:#fffbeb}
+.badges{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.badge{background:#fff;border:1px solid var(--border);padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;color:#0f172a}
+.tablewrap{overflow-x:auto}
+.cmp{width:100%;border-collapse:collapse;min-width:520px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+.cmp th,.cmp td{padding:14px 16px;border-bottom:1px solid var(--border);text-align:left}
+.cmp th{background:var(--surface2);font-weight:700;color:#0f172a}
+.cmp td:first-child{font-weight:600}
+.winner{margin-top:14px;font-size:16px;color:#065f46}
+.q{background:#fff;border:1px solid var(--border);padding:18px 20px;border-radius:12px;margin-bottom:12px}
+.q ul{margin-top:10px;padding-left:22px;color:#334155}
+.result{background:#ecfdf5;border:1px solid #10b981;padding:16px 18px;border-radius:12px;margin-top:14px;font-size:16px}
+.video{width:100%;aspect-ratio:16/9;border-radius:16px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.12);background:#000}
 .video iframe{width:100%;height:100%;border:0}
-.notice{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:14px 16px;border-radius:10px;font-size:14px}
-.final{text-align:center}
-.cta{display:inline-block;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;font-weight:700;padding:16px 36px;border-radius:12px;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,.18)}
-.note{margin-top:14px;color:#64748b;font-size:13px}
-footer{padding:24px;text-align:center;color:#64748b;font-size:12px}
+.notice{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:16px 20px;border-radius:12px;font-size:15px;text-align:center;max-width:720px;margin:0 auto}
+.faq{background:#fff;border:1px solid var(--border);padding:16px 20px;border-radius:12px;margin-bottom:10px;cursor:pointer}
+.faq summary{font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.faq summary::after{content:"+";font-size:22px;font-weight:300;color:var(--p)}
+.faq[open] summary::after{content:"−"}
+.faq p{margin-top:12px;color:#334155}
+.finalcta{text-align:center;padding:20px 0}
+.note{margin-top:14px;color:var(--muted);font-size:13px}
+.cta{display:inline-block;background:linear-gradient(135deg,var(--p),var(--a));color:#fff;font-weight:700;padding:18px 36px;border-radius:14px;text-decoration:none;box-shadow:0 10px 30px rgba(99,102,241,.35);transition:transform .15s ease, box-shadow .15s ease;font-size:17px}
+.cta:hover{transform:translateY(-1px);box-shadow:0 14px 36px rgba(99,102,241,.45)}
+.cta-large{padding:20px 44px;font-size:18px;margin-top:28px}
+.hero .cta{background:#fff;color:var(--p)}
+.hero .cta:hover{box-shadow:0 14px 36px rgba(0,0,0,.2)}
+.sticky-cta{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid var(--border);padding:12px 16px;z-index:50;display:flex;justify-content:center}
+.sticky-cta .cta{width:100%;max-width:520px;text-align:center;padding:16px;border-radius:12px;font-size:16px}
+@media (min-width:768px){.sticky-cta{display:none}body{padding-bottom:0}}
+footer.aff-footer{padding:32px 20px 24px;text-align:center;color:var(--muted);font-size:12px;border-top:1px solid var(--border);background:var(--surface)}
+footer.aff-footer .disclosure{max-width:720px;margin:0 auto 8px;font-size:13px}
 </style></head>
 <body>
 ${sec.join("\n")}
-<footer>Esta é uma página de recomendação. Ao clicar no botão você é redirecionado para o site oficial do produto. Podemos receber comissão por compras realizadas.</footer>
+<footer class="aff-footer">
+<p class="disclosure">${esc(disclosure)}</p>
+<p>© ${new Date().getFullYear()}. Conteúdo independente.</p>
+</footer>
+${stickyCta}
 </body></html>`;
 }
