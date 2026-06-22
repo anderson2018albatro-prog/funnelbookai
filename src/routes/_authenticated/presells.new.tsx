@@ -18,7 +18,8 @@ function NewPresell() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     source_url: "", affiliate_url: "", presell_type: "review",
-    niche: "", target_audience: "", tone: "persuasivo", language: "pt-BR", extra_prompt: "",
+    niche: "", target_audience: "", tone: "persuasivo", language: "pt-BR",
+    extra_prompt: "", manual_info: "",
   });
   const [busy, setBusy] = useState(false);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -91,6 +92,12 @@ function NewPresell() {
             <Label>Comando extra para IA</Label>
             <Textarea rows={3} value={form.extra_prompt} onChange={(e) => set("extra_prompt", e.target.value)}
               placeholder="Ex.: foque nos benefícios para iniciantes; mencione frete grátis; use linguagem informal" />
+          </div>
+          <div>
+            <Label>Informações manuais do produto (opcional)</Label>
+            <Textarea rows={3} value={form.manual_info} onChange={(e) => set("manual_info", e.target.value)}
+              placeholder="Use se a página oficial bloquear leitura ou depender de JavaScript. Cole nome, principais benefícios, preço, garantia, depoimentos..." />
+            <p className="mt-1 text-xs text-muted-foreground">Quando preenchido, a IA usa estas informações junto com (ou no lugar de) o que conseguir extrair do link.</p>
           </div>
           <Button onClick={submit} disabled={busy} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
