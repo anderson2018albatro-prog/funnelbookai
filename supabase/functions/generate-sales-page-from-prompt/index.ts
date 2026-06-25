@@ -92,24 +92,14 @@ Oferta/preço: ${offer}
 Idioma: ${language || "pt-BR"}
 Tom de voz: ${tone || "persuasivo"}
 Tipo de página: ${page_type}`;
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "Você é um copywriter de alta conversão. Responda APENAS com JSON válido, sem markdown e sem cercas de código." },
-          { role: "user", content: `Crie uma página de vendas no idioma ${language || "pt-BR"} com base em:
+    const raw = await chatCompletion([
+      { role: "system", content: "Você é um copywriter de alta conversão. Responda APENAS com JSON válido, sem markdown e sem cercas de código." },
+      { role: "user", content: `Crie uma página de vendas no idioma ${language || "pt-BR"} com base em:
 ${ctx}
 
 Retorne JSON:
 {"headline":string,"subheadline":string,"promessa_principal":string,"beneficios":string[],"para_quem":string[],"aprendizado":string[],"oferta":string,"preco":string,"bonus":string[],"garantia":string,"faq":[{"pergunta":string,"resposta":string}],"cta":string}` },
-        ],
-      }),
-    });
-    if (!aiRes.ok) throw new Error(`IA ${aiRes.status}: ${(await aiRes.text()).slice(0, 400)}`);
-    const ai = await aiRes.json();
-    const raw = ai.choices?.[0]?.message?.content ?? "";
+    ]);
     if (!raw) throw new Error("Resposta vazia da IA");
     const sp = JSON.parse(stripFences(raw));
     const title = sp.headline ?? product_name ?? "Página de vendas";
