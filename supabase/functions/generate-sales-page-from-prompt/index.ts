@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
 
     // @ts-ignore
     EdgeRuntime.waitUntil(processBg({
-      admin, lovableKey, pageId: created.id,
+      admin, lovableKey: lovableKey ?? "", pageId: created.id,
       prompt, product_name, niche, target_audience, offer, button_url, language, tone, page_type,
     }));
 
