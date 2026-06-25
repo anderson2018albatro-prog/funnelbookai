@@ -3,6 +3,7 @@
 // then asks the AI to write an original presell. NEVER fires affiliate cookies,
 // NEVER injects iframes, NEVER auto-redirects. CTAs are real <a> tags only.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { chatCompletion } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
