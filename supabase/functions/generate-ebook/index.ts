@@ -3,6 +3,7 @@
 // e processa a geração em background (EdgeRuntime.waitUntil) para não estourar timeout.
 // O frontend faz polling em ebooks.status.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { chatCompletion } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,28 +87,11 @@ function parseLoose(raw: string): any {
   }
 }
 
-async function callAI(lovableKey: string, prompt: string) {
-  const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${lovableKey}`,
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "Você responde APENAS com um único objeto JSON válido. Não use markdown nem cercas de código. Dentro das strings, use \\n para quebras de linha — nunca quebras de linha cruas." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!aiRes.ok) {
-    const t = await aiRes.text();
-    throw new Error(`IA ${aiRes.status}: ${t.slice(0, 400)}`);
-  }
-  const ai = await aiRes.json();
-  const content = ai.choices?.[0]?.message?.content ?? "";
+async function callAI(_lovableKey: string, prompt: string) {
+  const content = await chatCompletion([
+    { role: "system", content: "Você responde APENAS com um único objeto JSON válido. Não use markdown nem cercas de código. Dentro das strings, use \\n para quebras de linha — nunca quebras de linha cruas." },
+    { role: "user", content: prompt },
+  ]);
   if (!content) throw new Error("Resposta vazia da IA");
   return parseLoose(content);
 }
@@ -203,8 +187,9 @@ Deno.serve(async (req) => {
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableKey) return json({ error: "LOVABLE_API_KEY não configurada" }, 500);
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY não configurada" }, 500);
+    if (!lovableKey && !openaiKey) return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
@@ -265,7 +250,7 @@ Deno.serve(async (req) => {
     // Dispara processamento em background
     // @ts-ignore EdgeRuntime existe em Supabase Edge Functions
     EdgeRuntime.waitUntil(
-      processInBackground({ admin, lovableKey, ebookId: ebook.id, userId, briefing })
+      processInBackground({ admin, lovableKey: lovableKey ?? "", ebookId: ebook.id, userId, briefing })
     );
 
     return json({ ebookId: ebook.id, status: "processing" }, 202);

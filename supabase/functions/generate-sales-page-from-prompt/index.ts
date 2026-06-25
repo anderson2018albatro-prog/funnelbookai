@@ -1,6 +1,7 @@
 // Edge Function: generate-sales-page-from-prompt
 // Creates a sales_pages row from a free-form AI prompt (no ebook required).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { chatCompletion } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,24 +92,14 @@ Oferta/preço: ${offer}
 Idioma: ${language || "pt-BR"}
 Tom de voz: ${tone || "persuasivo"}
 Tipo de página: ${page_type}`;
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "Você é um copywriter de alta conversão. Responda APENAS com JSON válido, sem markdown e sem cercas de código." },
-          { role: "user", content: `Crie uma página de vendas no idioma ${language || "pt-BR"} com base em:
+    const raw = await chatCompletion([
+      { role: "system", content: "Você é um copywriter de alta conversão. Responda APENAS com JSON válido, sem markdown e sem cercas de código." },
+      { role: "user", content: `Crie uma página de vendas no idioma ${language || "pt-BR"} com base em:
 ${ctx}
 
 Retorne JSON:
 {"headline":string,"subheadline":string,"promessa_principal":string,"beneficios":string[],"para_quem":string[],"aprendizado":string[],"oferta":string,"preco":string,"bonus":string[],"garantia":string,"faq":[{"pergunta":string,"resposta":string}],"cta":string}` },
-        ],
-      }),
-    });
-    if (!aiRes.ok) throw new Error(`IA ${aiRes.status}: ${(await aiRes.text()).slice(0, 400)}`);
-    const ai = await aiRes.json();
-    const raw = ai.choices?.[0]?.message?.content ?? "";
+    ]);
     if (!raw) throw new Error("Resposta vazia da IA");
     const sp = JSON.parse(stripFences(raw));
     const title = sp.headline ?? product_name ?? "Página de vendas";
@@ -133,7 +124,9 @@ Deno.serve(async (req) => {
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableKey || !serviceKey) return json({ error: "Chaves não configuradas" }, 500);
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY ausente" }, 500);
+    if (!lovableKey && !openaiKey) return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
     const supabase = createClient(supabaseUrl, anon, { global: { headers: { Authorization: authHeader } } });
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: userData } = await supabase.auth.getUser();
@@ -163,7 +156,7 @@ Deno.serve(async (req) => {
 
     // @ts-ignore
     EdgeRuntime.waitUntil(processBg({
-      admin, lovableKey, pageId: created.id,
+      admin, lovableKey: lovableKey ?? "", pageId: created.id,
       prompt, product_name, niche, target_audience, offer, button_url, language, tone, page_type,
     }));
 

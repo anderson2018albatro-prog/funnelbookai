@@ -11,3 +11,9 @@ verify_jwt = true
 
 [functions.improve-copy]
 verify_jwt = true
+
+[functions.generate-presell]
+verify_jwt = true
+
+[functions.generate-sales-page-from-prompt]
+verify_jwt = true
