@@ -124,7 +124,9 @@ Deno.serve(async (req) => {
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableKey || !serviceKey) return json({ error: "Chaves não configuradas" }, 500);
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY ausente" }, 500);
+    if (!lovableKey && !openaiKey) return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
     const supabase = createClient(supabaseUrl, anon, { global: { headers: { Authorization: authHeader } } });
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: userData } = await supabase.auth.getUser();
