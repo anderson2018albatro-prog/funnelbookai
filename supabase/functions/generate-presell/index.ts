@@ -188,15 +188,10 @@ ${manual_info ? `\nInformações fornecidas pelo usuário:\n${manual_info}` : ""
 
 Comando extra: ${extra_prompt || "(nenhum)"}`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content:
-            "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, persuasivo e mobile-first. NUNCA copie literalmente textos da página oficial — use como referência. NUNCA recomende cookie stuffing, redirecionamento invisível ou cookie antes do clique. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown e sem cercas." },
-          { role: "user", content: `Crie uma presell premium (tipo "${presell_type}") com base no contexto abaixo. Gere texto original e persuasivo, com headline forte e benefícios claros.
+    const raw = await chatCompletion([
+      { role: "system", content:
+        "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, persuasivo e mobile-first. NUNCA copie literalmente textos da página oficial — use como referência. NUNCA recomende cookie stuffing, redirecionamento invisível ou cookie antes do clique. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown e sem cercas." },
+      { role: "user", content: `Crie uma presell premium (tipo "${presell_type}") com base no contexto abaixo. Gere texto original e persuasivo, com headline forte e benefícios claros.
 
 ${ctx}
 
@@ -227,12 +222,7 @@ Retorne JSON com:
  "cta_note": string,
  "faq": [{"q":string,"a":string}]
 }` },
-        ],
-      }),
-    });
-    if (!aiRes.ok) throw new Error(`IA ${aiRes.status}: ${(await aiRes.text()).slice(0, 400)}`);
-    const ai = await aiRes.json();
-    const raw = ai.choices?.[0]?.message?.content ?? "";
+    ]);
     if (!raw) throw new Error("Resposta vazia da IA");
     const p = JSON.parse(stripFences(raw));
 
