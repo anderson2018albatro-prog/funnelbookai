@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
 
     // @ts-ignore EdgeRuntime
     EdgeRuntime.waitUntil(processBg({
-      admin, lovableKey, presellId: created.id,
+      admin, lovableKey: lovableKey ?? "", presellId: created.id,
       source_url, affiliate_url, presell_type, niche, target_audience, tone, language,
       extra_prompt, manual_info,
     }));
