@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
     // Dispara processamento em background
     // @ts-ignore EdgeRuntime existe em Supabase Edge Functions
     EdgeRuntime.waitUntil(
-      processInBackground({ admin, lovableKey, ebookId: ebook.id, userId, briefing })
+      processInBackground({ admin, lovableKey: lovableKey ?? "", ebookId: ebook.id, userId, briefing })
     );
 
     return json({ ebookId: ebook.id, status: "processing" }, 202);
