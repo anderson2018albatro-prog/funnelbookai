@@ -87,28 +87,11 @@ function parseLoose(raw: string): any {
   }
 }
 
-async function callAI(lovableKey: string, prompt: string) {
-  const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${lovableKey}`,
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "Você responde APENAS com um único objeto JSON válido. Não use markdown nem cercas de código. Dentro das strings, use \\n para quebras de linha — nunca quebras de linha cruas." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!aiRes.ok) {
-    const t = await aiRes.text();
-    throw new Error(`IA ${aiRes.status}: ${t.slice(0, 400)}`);
-  }
-  const ai = await aiRes.json();
-  const content = ai.choices?.[0]?.message?.content ?? "";
+async function callAI(_lovableKey: string, prompt: string) {
+  const content = await chatCompletion([
+    { role: "system", content: "Você responde APENAS com um único objeto JSON válido. Não use markdown nem cercas de código. Dentro das strings, use \\n para quebras de linha — nunca quebras de linha cruas." },
+    { role: "user", content: prompt },
+  ]);
   if (!content) throw new Error("Resposta vazia da IA");
   return parseLoose(content);
 }
