@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, MousePointerClick, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PRESELL_TYPE_LABELS } from "@/lib/presell-blocks";
 
@@ -16,7 +16,7 @@ function PresellsList() {
     queryKey: ["presells"],
     queryFn: async () => {
       const { data, error } = await supabase.from("presells")
-        .select("id,title,slug,presell_type,status,affiliate_url,created_at")
+        .select("id,title,slug,presell_type,status,affiliate_url,click_count,created_at,is_published")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -54,16 +54,28 @@ function PresellsList() {
         ) : (
           <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
             {q.data.map((p: any) => (
-              <li key={p.id} className="flex items-center gap-2 p-3">
+              <li key={p.id} className="flex flex-wrap items-center gap-2 p-3 sm:flex-nowrap">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{p.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {PRESELL_TYPE_LABELS[p.presell_type as keyof typeof PRESELL_TYPE_LABELS] ?? p.presell_type} ·{" "}
-                    {p.status === "processing" ? "gerando…" : p.status}
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium">{p.title}</span>
+                    {p.is_published && (
+                      <span className="shrink-0 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">publicada</span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{PRESELL_TYPE_LABELS[p.presell_type as keyof typeof PRESELL_TYPE_LABELS] ?? p.presell_type}</span>
+                    <span>·</span>
+                    <span>{p.status === "processing" ? "gerando…" : p.status}</span>
+                    {(p.click_count ?? 0) > 0 && (
+                      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        <MousePointerClick className="h-2.5 w-2.5" />
+                        {p.click_count} clique{p.click_count !== 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <a href={`/pre/${p.slug}`} target="_blank" rel="noopener">
-                  <Button size="sm" variant="ghost"><ExternalLink className="h-4 w-4" /></Button>
+                  <Button size="sm" variant="ghost" title="Ver presell pública"><ExternalLink className="h-4 w-4" /></Button>
                 </a>
                 <Link to="/presells/$id/edit" params={{ id: p.id }}>
                   <Button size="sm" variant="ghost"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>

@@ -26,6 +26,7 @@ function NewEbook() {
     tom_voz: "Profissional e acessível",
     tamanho: "medio" as "curto" | "medio" | "completo" | "custom",
     paginas: 25,
+    capitulos: 5,
     uso: "venda",
   });
 
@@ -132,15 +133,28 @@ function NewEbook() {
                 <p className="mt-1 text-xs text-muted-foreground">Será gerado com ~{effectivePages} páginas.</p>
               </div>
               <div>
-                <Label>Uso</Label>
-                <Select value={form.uso} onValueChange={(v) => setForm({ ...form, uso: v })}>
+                <Label htmlFor="capitulos">Número de capítulos</Label>
+                <Select value={String(form.capitulos)} onValueChange={(v) => setForm({ ...form, capitulos: Number(v) })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="venda">Vender este ebook</SelectItem>
-                    <SelectItem value="gratuito">Usar como material gratuito</SelectItem>
+                    <SelectItem value="3">3 capítulos (introdutório)</SelectItem>
+                    <SelectItem value="5">5 capítulos (padrão)</SelectItem>
+                    <SelectItem value="7">7 capítulos (completo)</SelectItem>
+                    <SelectItem value="10">10 capítulos (extenso)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-xs text-muted-foreground">Cada capítulo terá conteúdo proporcional ao tamanho escolhido.</p>
               </div>
+            </div>
+            <div>
+              <Label>Uso</Label>
+              <Select value={form.uso} onValueChange={(v) => setForm({ ...form, uso: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="venda">Vender este ebook</SelectItem>
+                  <SelectItem value="gratuito">Usar como material gratuito / lead magnet</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

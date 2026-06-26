@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 /** Normalize a field that the AI may return as string, array, or null. */
@@ -114,12 +114,54 @@ function EbookDetail() {
 
   const [title, setTitle] = useState("");
   const [contentText, setContentText] = useState("");
+  const [editMode, setEditMode] = useState<"visual" | "json">("visual");
+  const [editedContent, setEditedContent] = useState<EbookContent | null>(null);
+
   useEffect(() => {
     if (ebookQ.data) {
       setTitle(ebookQ.data.title);
       setContentText(JSON.stringify(ebookQ.data.content, null, 2));
     }
   }, [ebookQ.data?.id, ebookQ.data?.status]);
+
+  useEffect(() => {
+    if (c && !editedContent) setEditedContent({ ...c });
+  }, [c]);
+
+  const ec = editedContent ?? c;
+
+  function updateChapter(i: number, field: "title" | "content", val: string) {
+    setEditedContent((prev) => {
+      const chapters = [...(prev?.chapters ?? [])];
+      chapters[i] = { ...chapters[i], [field]: val };
+      return { ...prev, chapters };
+    });
+  }
+
+  function addChapter() {
+    setEditedContent((prev) => ({
+      ...prev,
+      chapters: [...(prev?.chapters ?? []), { title: `Capítulo ${(prev?.chapters?.length ?? 0) + 1}`, content: "" }],
+    }));
+  }
+
+  function removeChapter(i: number) {
+    setEditedContent((prev) => {
+      const chapters = [...(prev?.chapters ?? [])];
+      chapters.splice(i, 1);
+      return { ...prev, chapters };
+    });
+  }
+
+  function moveChapter(i: number, dir: -1 | 1) {
+    setEditedContent((prev) => {
+      const chapters = [...(prev?.chapters ?? [])];
+      const j = i + dir;
+      if (j < 0 || j >= chapters.length) return prev;
+      [chapters[i], chapters[j]] = [chapters[j], chapters[i]];
+      return { ...prev, chapters };
+    });
+  }
 
   const c = useMemo(() => normalizeEbookContent(ebookQ.data?.content), [ebookQ.data?.content]);
   const renderable = hasRenderableContent(c);
@@ -135,11 +177,15 @@ function EbookDetail() {
   async function save() {
     setBusy("save");
     try {
-      let parsed: any = ebookQ.data?.content;
-      try { parsed = JSON.parse(contentText); } catch { /* keep object */ }
+      let parsed: any;
+      if (editMode === "json") {
+        try { parsed = JSON.parse(contentText); } catch { parsed = ebookQ.data?.content; }
+      } else {
+        parsed = { ...(ebookQ.data?.content as any), ...editedContent };
+      }
       const { error } = await supabase.from("ebooks").update({ title, content: parsed }).eq("id", id);
       if (error) throw error;
-      toast.success("Salvo");
+      toast.success("Salvo com sucesso!");
       qc.invalidateQueries({ queryKey: ["ebook", id] });
     } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   }
@@ -341,51 +387,19 @@ function EbookDetail() {
           {ebook.niche && <p className="mt-3 text-xs text-muted-foreground">Nicho: {ebook.niche} · Status: {status}</p>}
         </div>
 
-        {renderable ? (
-          <div className="rounded-2xl border border-border bg-card p-5">
-            {c.subtitle && <p className="text-base font-medium text-primary">{c.subtitle}</p>}
-            {c.introduction && (
-              <>
-                <h3 className="mt-4 font-display text-lg font-semibold">Introdução</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.introduction}</p>
-              </>
-            )}
-            {(() => { const summary = asArray(c.summary); return summary.length ? (
-              <>
-                <h3 className="mt-6 font-display text-lg font-semibold">Sumário</h3>
-                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                  {summary.map((s, i) => <li key={i}>{s}</li>)}
-                </ol>
-              </>
-            ) : null; })()}
-            {(Array.isArray(c.chapters) ? c.chapters : []).map((ch: any, i: number) => (
-              <div key={i} className="mt-6">
-                <h3 className="font-display text-lg font-semibold">Capítulo {i + 1}: {ch?.title ?? ""}</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{String(ch?.content ?? "")}</p>
-              </div>
-            ))}
-            {c.conclusion && (
-              <>
-                <h3 className="mt-6 font-display text-lg font-semibold">Conclusão</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.conclusion}</p>
-              </>
-            )}
-            {c.call_to_action && (
-              <>
-                <h3 className="mt-6 font-display text-lg font-semibold">Chamada para Ação</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{c.call_to_action}</p>
-              </>
-            )}
-            {(() => { const bonus = asArray(c.bonus); return bonus.length ? (
-              <>
-                <h3 className="mt-6 font-display text-lg font-semibold">Bônus sugeridos</h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                  {bonus.map((b, i) => <li key={i}>{b}</li>)}
-                </ul>
-              </>
-            ) : null; })()}
+        {/* Mode toggle */}
+        {renderable && (
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 w-fit">
+            <Button size="sm" variant={editMode === "visual" ? "secondary" : "ghost"} onClick={() => setEditMode("visual")} className="h-7 px-3 text-xs">
+              <BookOpen className="mr-1 h-3 w-3" /> Editor Visual
+            </Button>
+            <Button size="sm" variant={editMode === "json" ? "secondary" : "ghost"} onClick={() => setEditMode("json")} className="h-7 px-3 text-xs">
+              JSON avançado
+            </Button>
           </div>
-        ) : (
+        )}
+
+        {!renderable && (
           <div className="rounded-2xl border border-dashed border-border bg-card p-5 text-sm">
             <div className="font-medium">Sem conteúdo renderizável</div>
             <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
@@ -399,10 +413,89 @@ function EbookDetail() {
           </div>
         )}
 
-        <details className="rounded-2xl border border-border bg-card p-5">
-          <summary className="cursor-pointer font-medium">Editar conteúdo (JSON avançado)</summary>
-          <Textarea rows={12} className="mt-3 font-mono text-xs" value={contentText} onChange={(e) => setContentText(e.target.value)} />
-        </details>
+        {renderable && editMode === "visual" && editedContent && (
+          <div className="space-y-4">
+            {/* Subtítulo */}
+            {ec.subtitle !== undefined && (
+              <div className="rounded-2xl border border-border bg-card p-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subtítulo</label>
+                <Input value={ec.subtitle ?? ""} onChange={(e) => setEditedContent((p) => ({ ...p, subtitle: e.target.value }))} />
+              </div>
+            )}
+
+            {/* Introdução */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Introdução</label>
+              <Textarea rows={5} value={ec.introduction ?? ""} onChange={(e) => setEditedContent((p) => ({ ...p, introduction: e.target.value }))} className="text-sm" />
+            </div>
+
+            {/* Capítulos */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-display font-semibold">Capítulos ({ec.chapters?.length ?? 0})</h3>
+                <Button size="sm" variant="outline" onClick={addChapter}>
+                  <Plus className="mr-1 h-3 w-3" /> Adicionar capítulo
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {(ec.chapters ?? []).map((ch, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-surface p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{i + 1}</span>
+                      <Input
+                        value={ch.title}
+                        onChange={(e) => updateChapter(i, "title", e.target.value)}
+                        className="h-8 font-semibold"
+                        placeholder="Título do capítulo"
+                      />
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => moveChapter(i, -1)} disabled={i === 0}><ChevronUp className="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => moveChapter(i, 1)} disabled={i === (ec.chapters?.length ?? 0) - 1}><ChevronDown className="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeChapter(i)}><X className="h-3 w-3" /></Button>
+                    </div>
+                    <Textarea
+                      rows={6}
+                      value={ch.content}
+                      onChange={(e) => updateChapter(i, "content", e.target.value)}
+                      className="text-sm"
+                      placeholder="Conteúdo do capítulo…"
+                    />
+                  </div>
+                ))}
+                {(!ec.chapters || ec.chapters.length === 0) && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">Nenhum capítulo. Clique em "Adicionar capítulo".</p>
+                )}
+              </div>
+            </div>
+
+            {/* Conclusão */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conclusão</label>
+              <Textarea rows={4} value={ec.conclusion ?? ""} onChange={(e) => setEditedContent((p) => ({ ...p, conclusion: e.target.value }))} className="text-sm" />
+            </div>
+
+            {/* CTA */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chamada para Ação (CTA)</label>
+              <Textarea rows={3} value={ec.call_to_action ?? ""} onChange={(e) => setEditedContent((p) => ({ ...p, call_to_action: e.target.value }))} className="text-sm" />
+            </div>
+
+            <Button onClick={save} disabled={busy === "save"} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
+              {busy === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar alterações
+            </Button>
+          </div>
+        )}
+
+        {renderable && editMode === "json" && (
+          <div className="rounded-2xl border border-border bg-card p-5">
+            <p className="mb-2 text-xs text-muted-foreground">Edite o JSON diretamente. Cuidado: alterações incorretas podem quebrar o conteúdo.</p>
+            <Textarea rows={16} className="font-mono text-xs" value={contentText} onChange={(e) => setContentText(e.target.value)} />
+            <Button onClick={save} disabled={busy === "save"} className="mt-3 w-full bg-gradient-primary text-primary-foreground shadow-glow">
+              {busy === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar JSON
+            </Button>
+          </div>
+        )}
 
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
           <div className="flex flex-wrap items-center justify-between gap-3">
