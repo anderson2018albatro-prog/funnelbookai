@@ -38,7 +38,7 @@ async function callGemini(key: string, messages: Msg[], maxTokens: number): Prom
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         max_tokens: maxTokens,
         messages,
       }),
