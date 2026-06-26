@@ -10,6 +10,31 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 
+function chapterImageUrl(title: string): string {
+  const kw = encodeURIComponent(
+    title.replace(/[^\w\sÀ-ÿ]/g, " ").trim().split(/\s+/).slice(0, 4).join(",")
+  );
+  return `https://source.unsplash.com/1200x400/?${kw}`;
+}
+
+async function imgToDataUrl(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth || 1200;
+        c.height = img.naturalHeight || 400;
+        c.getContext("2d")!.drawImage(img, 0, 0);
+        resolve(c.toDataURL("image/jpeg", 0.8));
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 /** Normalize a field that the AI may return as string, array, or null. */
 function asArray(v: unknown): string[] {
   if (!v) return [];
@@ -305,11 +330,21 @@ function EbookDetail() {
         writeHeading("Introdução", 20);
         writeBody(c.introduction);
       }
-      chapters.forEach((ch: any, i: number) => {
+      for (let i = 0; i < chapters.length; i++) {
+        const ch: any = chapters[i];
         newPage();
         writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
+        if (ch?.title) {
+          const imgData = await imgToDataUrl(chapterImageUrl(ch.title));
+          if (imgData) {
+            const imgH = Math.round(maxW * 400 / 1200);
+            ensure(imgH + 16);
+            doc.addImage(imgData, "JPEG", margin, y, maxW, imgH);
+            y += imgH + 14;
+          }
+        }
         writeBody(String(ch?.content ?? ""));
-      });
+      }
       if (c.conclusion) {
         newPage();
         writeHeading("Conclusão", 20);
@@ -452,6 +487,15 @@ function EbookDetail() {
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => moveChapter(i, 1)} disabled={i === (ec.chapters?.length ?? 0) - 1}><ChevronDown className="h-3 w-3" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeChapter(i)}><X className="h-3 w-3" /></Button>
                     </div>
+                    {ch.title && (
+                      <img
+                        src={chapterImageUrl(ch.title)}
+                        alt={ch.title}
+                        className="mb-3 w-full rounded-lg object-cover"
+                        style={{ height: 160 }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
                     <Textarea
                       rows={6}
                       value={ch.content}

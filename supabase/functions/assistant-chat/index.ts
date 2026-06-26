@@ -3,6 +3,7 @@
 // Recebe: { messages: [{role,content}] }
 // Retorna: { reply: string, briefing?: object }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { chatCompletion } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,8 +47,6 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableKey) return json({ error: "LOVABLE_API_KEY não configurada" }, 500);
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
@@ -59,22 +58,7 @@ Deno.serve(async (req) => {
     const { messages } = await req.json();
     if (!Array.isArray(messages)) return json({ error: "messages obrigatório" }, 400);
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "system", content: SYSTEM }, ...messages],
-      }),
-    });
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      if (aiRes.status === 429) return json({ error: "Limite de uso atingido, tente novamente em alguns minutos." }, 429);
-      if (aiRes.status === 402) return json({ error: "Créditos de IA esgotados na workspace." }, 402);
-      return json({ error: `IA ${aiRes.status}: ${t.slice(0, 300)}` }, 500);
-    }
-    const ai = await aiRes.json();
-    const reply: string = ai.choices?.[0]?.message?.content ?? "";
+    const reply = await chatCompletion([{ role: "system", content: SYSTEM }, ...messages]);
 
     // tenta detectar JSON final {done:true,...}
     let briefing: any | null = null;

@@ -1,6 +1,7 @@
 // Edge Function: generate-sales-page
 // Cria/atualiza a página em "processing" e gera o HTML em background.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { chatCompletion } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,7 +20,7 @@ function json(data: unknown, status = 200) {
 function slugify(input: string) {
   return (
     input
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
       .toLowerCase().replace(/[^a-z0-9\s-]/g, "")
       .trim().replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 60) || "pagina"
   );
@@ -34,10 +35,19 @@ function esc(s: string) {
 function stripFences(s: string) {
   let c = s.trim();
   if (c.startsWith("```")) c = c.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const first = c.indexOf("{"); const last = c.lastIndexOf("}");
+  if (first > 0 && last > first) c = c.slice(first, last + 1);
   return c;
 }
 
 function buildBlocks(sp: any, fallbackTitle: string) {
+  // Depoimentos placeholder claramente marcados — nunca apresentados como reais
+  const testimonials = [
+    { name: "Maria S.", text: "Conteúdo incrível, me ajudou muito!", stars: 5, placeholder: true },
+    { name: "João P.", text: "Exatamente o que eu precisava para avançar.", stars: 5, placeholder: true },
+    { name: "Ana R.", text: "Linguagem clara e prática. Recomendo!", stars: 4, placeholder: true },
+  ];
+
   return {
     order: ["hero","product","promessa","beneficios","para_quem","aprendizado","bonus","depoimentos","oferta","garantia","faq","final_cta"],
     data: {
@@ -48,7 +58,7 @@ function buildBlocks(sp: any, fallbackTitle: string) {
       para_quem: { visible: true, title: "Para quem é", items: sp.para_quem ?? [] },
       aprendizado: { visible: true, title: "O que você vai aprender", items: sp.aprendizado ?? [] },
       bonus: { visible: (sp.bonus ?? []).length > 0, title: "🎁 Bônus exclusivos", items: sp.bonus ?? [] },
-      depoimentos: { visible: false, title: "O que dizem", items: [] },
+      depoimentos: { visible: true, title: "O que dizem os leitores", items: testimonials, is_placeholder: true },
       oferta: { visible: true, title: "Oferta especial", description: sp.oferta ?? "", price: "", cta_text: sp.cta ?? "Quero agora", cta_url: "#cta-final" },
       garantia: { visible: !!sp.garantia, title: "✅ Garantia", text: sp.garantia ?? "" },
       faq: { visible: (sp.faq ?? []).length > 0, title: "Perguntas frequentes", items: sp.faq ?? [] },
@@ -65,6 +75,15 @@ function buildHtml(sp: any, title: string) {
   const bonus = list(sp.bonus);
   const faq = (sp.faq ?? []).map((f: any) =>
     `<details><summary>${esc(f.pergunta)}</summary><p>${esc(f.resposta)}</p></details>`
+  ).join("");
+
+  const testimonials = [
+    { name: "Maria S.", text: "Conteúdo incrível, me ajudou muito!", stars: 5 },
+    { name: "João P.", text: "Exatamente o que eu precisava para avançar.", stars: 5 },
+    { name: "Ana R.", text: "Linguagem clara e prática. Recomendo!", stars: 4 },
+  ];
+  const testimonialsHtml = testimonials.map((t) =>
+    `<div class="testimonial"><div class="t-stars">${"⭐".repeat(t.stars)}</div><p class="t-text">"${esc(t.text)}"</p><strong class="t-name">— ${esc(t.name)}</strong></div>`
   ).join("");
 
   return `<!DOCTYPE html>
@@ -86,7 +105,14 @@ h2{font-size:clamp(22px,3vw,32px);margin-bottom:20px;text-align:center}
 .promise{background:#f8fafc;padding:32px;border-radius:16px;text-align:center;font-size:18px;font-weight:500}
 ul.feat{list-style:none;display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 ul.feat li{background:#f1f5f9;padding:16px 20px;border-radius:12px;border-left:4px solid #6366f1}
+.testimonials{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.testimonial{background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:20px}
+.t-stars{font-size:18px;margin-bottom:8px}
+.t-text{font-style:italic;color:#334155;margin-bottom:10px}
+.t-name{font-size:14px;color:#64748b}
+.placeholder-notice{text-align:center;font-size:12px;color:#94a3b8;margin-top:12px;font-style:italic}
 .offer{background:linear-gradient(135deg,#f5f3ff,#ede9fe);padding:40px;border-radius:20px;text-align:center}
+.offer .cta{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
 .bonus{background:#fef3c7;padding:24px;border-radius:14px}
 .bonus h3{margin-bottom:12px;color:#92400e}
 .bonus ul{padding-left:20px}
@@ -112,6 +138,11 @@ ${beneficios ? `<section class="wrap"><h2>Benefícios</h2><ul class="feat">${ben
 ${paraQuem ? `<section class="wrap"><h2>Para quem é</h2><ul class="feat">${paraQuem}</ul></section>` : ""}
 ${bullets ? `<section class="wrap"><h2>O que você vai aprender</h2><ul class="feat">${bullets}</ul></section>` : ""}
 
+<section class="wrap"><h2>O que dizem os leitores</h2>
+  <div class="testimonials">${testimonialsHtml}</div>
+  <p class="placeholder-notice">⚠️ Depoimentos de exemplo — substitua pelos reais antes de publicar.</p>
+</section>
+
 <section class="wrap" id="oferta"><h2>Oferta especial</h2>
   <div class="offer">
     <p style="font-size:20px;margin-bottom:24px">${esc(sp.oferta ?? "")}</p>
@@ -133,11 +164,10 @@ ${faq ? `<section class="wrap"><h2>Perguntas frequentes</h2>${faq}</section>` : 
 
 async function processInBackground(opts: {
   admin: ReturnType<typeof createClient>;
-  lovableKey: string;
   pageId: string;
   ebook: any;
 }) {
-  const { admin, lovableKey, pageId, ebook } = opts;
+  const { admin, pageId, ebook } = opts;
   try {
     const ec = ebook.content as any;
     const ctx = `Título do ebook: ${ebook.title}
@@ -168,23 +198,10 @@ Retorne APENAS JSON válido:
   "cta": string
 }`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "Você responde APENAS com JSON válido, sem markdown e sem cercas de código." },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      throw new Error(`IA ${aiRes.status}: ${t.slice(0, 400)}`);
-    }
-    const ai = await aiRes.json();
-    const raw = ai.choices?.[0]?.message?.content ?? "";
+    const raw = await chatCompletion([
+      { role: "system", content: "Você responde APENAS com JSON válido, sem markdown e sem cercas de código." },
+      { role: "user", content: prompt },
+    ]);
     if (!raw) throw new Error("Resposta vazia da IA");
     const sp = JSON.parse(stripFences(raw));
     const title = sp.headline ?? ebook.title;
@@ -215,8 +232,9 @@ Deno.serve(async (req) => {
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableKey) return json({ error: "LOVABLE_API_KEY não configurada" }, 500);
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY não configurada" }, 500);
+    if (!lovableKey && !openaiKey) return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
@@ -269,7 +287,7 @@ Deno.serve(async (req) => {
     }
 
     // @ts-ignore
-    EdgeRuntime.waitUntil(processInBackground({ admin, lovableKey, pageId, ebook }));
+    EdgeRuntime.waitUntil(processInBackground({ admin, pageId, ebook }));
 
     return json({ pageId, slug, status: "processing" }, 202);
   } catch (e) {
