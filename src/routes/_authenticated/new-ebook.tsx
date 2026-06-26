@@ -104,7 +104,26 @@ function NewEbook() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="idioma">Idioma</Label>
-                <Input id="idioma" value={form.idioma} onChange={(e) => setForm({ ...form, idioma: e.target.value })} />
+                <Select value={form.idioma} onValueChange={(v) => setForm({ ...form, idioma: v })}>
+                  <SelectTrigger id="idioma"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Português">🇧🇷 Português (Brasil)</SelectItem>
+                    <SelectItem value="Português (Portugal)">🇵🇹 Português (Portugal)</SelectItem>
+                    <SelectItem value="English">🇺🇸 Inglês</SelectItem>
+                    <SelectItem value="Español">🇪🇸 Espanhol</SelectItem>
+                    <SelectItem value="Français">🇫🇷 Francês</SelectItem>
+                    <SelectItem value="Italiano">🇮🇹 Italiano</SelectItem>
+                    <SelectItem value="Deutsch">🇩🇪 Alemão</SelectItem>
+                    <SelectItem value="日本語">🇯🇵 Japonês</SelectItem>
+                    <SelectItem value="中文">🇨🇳 Mandarim</SelectItem>
+                    <SelectItem value="Русский">🇷🇺 Russo</SelectItem>
+                    <SelectItem value="العربية">🇸🇦 Árabe</SelectItem>
+                    <SelectItem value="हिन्दी">🇮🇳 Hindi</SelectItem>
+                    <SelectItem value="Nederlands">🇳🇱 Holandês</SelectItem>
+                    <SelectItem value="Polski">🇵🇱 Polonês</SelectItem>
+                    <SelectItem value="Türkçe">🇹🇷 Turco</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="tom">Tom de voz</Label>

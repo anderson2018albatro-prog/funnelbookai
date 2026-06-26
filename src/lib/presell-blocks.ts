@@ -3,7 +3,8 @@
 // Every CTA is a real anchor with target="_blank" rel="sponsored noopener noreferrer".
 
 export type PresellType =
-  | "review" | "advertorial" | "quiz" | "comparativo" | "bridge" | "vsl" | "cookie_notice";
+  | "review" | "advertorial" | "quiz" | "comparativo" | "bridge" | "vsl" | "cookie_notice"
+  | "native_ad" | "story" | "listicle";
 
 export type PresellBlockKey =
   | "topbar" | "headline" | "rating" | "media" | "intro" | "what_is" | "for_whom"
@@ -81,12 +82,15 @@ export const PRESELL_LABELS: Record<PresellBlockKey, string> = {
 
 export const PRESELL_TYPE_LABELS: Record<PresellType, string> = {
   review: "Review Premium",
-  advertorial: "Advertorial (matéria)",
+  advertorial: "Advertorial (matéria editorial)",
   quiz: "Quiz Presell",
-  comparativo: "Comparativo",
+  comparativo: "Comparativo de produtos",
   bridge: "Bridge Page direta",
-  vsl: "VSL Presell",
+  vsl: "VSL Presell (vídeo)",
   cookie_notice: "Aviso de redirecionamento",
+  native_ad: "Anúncio Nativo (artigo patrocinado)",
+  story: "Narrativa de Transformação",
+  listicle: "Listicle (Top Razões)",
 };
 
 export const DEFAULT_THEME: PresellTheme = {
@@ -115,6 +119,12 @@ export function defaultOrderFor(type: PresellType): PresellBlockKey[] {
       return ["topbar","headline","video","benefits","cta","faq"];
     case "cookie_notice":
       return ["topbar","headline","cookie_notice","cta"];
+    case "native_ad":
+      return ["topbar","headline","media","intro","story","what_is","benefits","proof","cta","faq"];
+    case "story":
+      return ["topbar","headline","story","what_is","how_it_works","benefits","pros","trust_badges","cta","faq"];
+    case "listicle":
+      return ["topbar","headline","media","intro","benefits","pros","proof","trust_badges","cta","faq"];
   }
 }
 
@@ -276,6 +286,47 @@ body{background:#f8fafc}
 .cta-large{font-size:20px;padding:22px 56px;border-radius:18px;box-shadow:0 16px 40px rgba(99,102,241,.4)}
 .band{background:#fff}
 .band.alt{background:#f1f5f9}`;
+    case "native_ad":
+      return `
+body{font-family:'Georgia','Times New Roman',serif;background:#fff}
+.topbar{background:#e63946;color:#fff;font-size:11px;letter-spacing:3px;text-transform:uppercase;font-weight:700}
+.hero{background:#fff;color:#111;padding:44px 20px;border-bottom:3px solid #e63946}
+.hero h1{font-family:Georgia,serif;color:#111;font-size:clamp(26px,4.5vw,44px);line-height:1.2}
+.hero .sub{color:#555;font-family:Georgia,serif;font-style:italic;margin:12px auto 0;font-size:18px}
+.hero .cta{display:none}
+.hero::before{background:none}
+.band.alt{background:#f5f5f0}
+h2{font-family:Georgia,serif;font-style:italic;text-align:left;border-bottom:1px solid #ddd;padding-bottom:10px}
+.prose,.lead{font-family:Georgia,serif;font-size:18px;line-height:1.85;color:#222}
+.cards li{border-left-color:#e63946;background:#fff8f8}
+.cards li::before{background:#e63946}
+.cta,.cta-large{background:#e63946;box-shadow:0 8px 24px rgba(230,57,70,.3)}
+.cta:hover,.cta-large:hover{box-shadow:0 12px 32px rgba(230,57,70,.45)}`;
+    case "story":
+      return `
+.hero{background:linear-gradient(160deg,#1e1b4b,#312e81);padding:72px 20px}
+.topbar{background:#312e81}
+.band.alt{background:#faf9ff}
+.prose{font-size:17px;line-height:1.9;color:#1e1b4b}
+.lead{font-size:21px;color:#312e81;font-style:italic;font-weight:600}
+h2{color:#1e1b4b}
+.cards li{border-left-color:#7c3aed;background:#f5f3ff}
+.cards li::before{background:#7c3aed}
+.pros li{background:#ecfdf5;border-color:#10b981;color:#065f46}
+.cta,.cta-large{background:linear-gradient(135deg,#7c3aed,#e11d48);box-shadow:0 10px 30px rgba(124,58,237,.35)}`;
+    case "listicle":
+      return `
+.hero{background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:72px 20px}
+.topbar{background:#1e3a5f;letter-spacing:1px}
+.band.alt{background:#f8fafc}
+.cards{grid-template-columns:1fr}
+.cards li{border-left:none;border-top:4px solid var(--p);padding-left:20px;counter-increment:item;display:grid;grid-template-columns:40px 1fr;align-items:start;gap:12px}
+.cards li::before{content:counter(item);width:36px;height:36px;font-size:16px;font-weight:800;background:linear-gradient(135deg,#0ea5e9,#6366f1)}
+.cards{counter-reset:item}
+.pros{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.pros li{border-color:#0ea5e9;background:#eff6ff;color:#1e40af}
+.cta,.cta-large{background:linear-gradient(135deg,#0ea5e9,#6366f1);box-shadow:0 10px 30px rgba(14,165,233,.35)}
+h2{text-align:left;border-bottom:3px solid var(--p);padding-bottom:10px;display:inline-block}`;
     default:
       return "";
   }

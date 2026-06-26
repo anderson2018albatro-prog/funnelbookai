@@ -13,7 +13,7 @@ const corsHeaders = {
 const json = (d: unknown, s = 200) =>
   new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-const VALID_TYPES = ["review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice"];
+const VALID_TYPES = ["review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice", "native_ad", "story", "listicle"];
 
 const DEFAULT_DISCLOSURE =
   "Esta página pode conter links de afiliado. Podemos receber comissão por compras realizadas, sem custo adicional para você.";
@@ -43,6 +43,9 @@ function defaultOrderFor(type: string): string[] {
     case "bridge": return ["topbar","headline","benefits","cookie_notice","cta"];
     case "vsl": return ["topbar","headline","video","benefits","cta","faq"];
     case "cookie_notice": return ["topbar","headline","cookie_notice","cta"];
+    case "native_ad": return ["topbar","headline","media","intro","story","what_is","benefits","proof","cta","faq"];
+    case "story": return ["topbar","headline","story","what_is","how_it_works","benefits","pros","trust_badges","cta","faq"];
+    case "listicle": return ["topbar","headline","media","intro","benefits","pros","proof","trust_badges","cta","faq"];
     default: return ["topbar","headline","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","trust_badges","cta","faq"];
   }
 }
@@ -188,10 +191,28 @@ ${manual_info ? `\nInformações fornecidas pelo usuário:\n${manual_info}` : ""
 
 Comando extra: ${extra_prompt || "(nenhum)"}`;
 
+    const typeGuidance: Record<string, string> = {
+      review: "Escreva uma review detalhada e honesta. Use rating (0-5), destaque pros e cons reais, e inclua FAQs técnicas. Tom: equilibrado e confiável.",
+      advertorial: "Escreva como matéria editorial jornalística. Use a 'topbar' como nome de publicação. Tom: editorial, informativo, com subtítulo tipo byline.",
+      quiz: "Crie 3-5 perguntas com 4 opções cada que levem o leitor a descobrir que o produto é ideal para ele. Inclua resultado positivo no final.",
+      comparativo: "Faça uma tabela comparativa com 5-8 features reais vs alternativas. Destaque o produto como vencedor claro com justificativa.",
+      bridge: "Seja direto e minimalista. Foque nos 3-5 maiores benefícios e use cookie_notice explicando transparentemente o redirecionamento.",
+      vsl: "Escreva copy para um vídeo de vendas. Crie suspense na headline. O video_url pode estar vazio (usuário preencherá). Benefícios devem criar urgência.",
+      cookie_notice: "Seja ultra direto. Uma headline, o aviso de redirecionamento e o CTA. Nada mais.",
+      native_ad: "Escreva como artigo de conteúdo patrocinado. A 'topbar' deve dizer 'Conteúdo Patrocinado'. Tom jornalístico e educativo. A 'story' deve ser um artigo fluido, não copy de vendas.",
+      story: "Escreva uma narrativa pessoal de transformação em primeira pessoa. A 'story' deve ter pelo menos 300 palavras contando o problema, a descoberta do produto e a transformação. Use emoção autêntica.",
+      listicle: "Escreva no formato 'Top [N] razões por que...'. A 'benefits' deve ter itens numerados com títulos curtos e explanação de 2-3 linhas cada. Crie urgência e curiosidade.",
+    };
+    const guidance = typeGuidance[presell_type] ?? typeGuidance.review;
+
     const raw = await chatCompletion([
       { role: "system", content:
         "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, persuasivo e mobile-first. NUNCA copie literalmente textos da página oficial — use como referência. NUNCA recomende cookie stuffing, redirecionamento invisível ou cookie antes do clique. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown e sem cercas." },
-      { role: "user", content: `Crie uma presell premium (tipo "${presell_type}") com base no contexto abaixo. Gere texto original e persuasivo, com headline forte e benefícios claros.
+      { role: "user", content: `Crie uma presell premium (tipo "${presell_type}") com base no contexto abaixo.
+
+INSTRUÇÕES ESPECÍFICAS PARA ESTE TIPO: ${guidance}
+
+Gere texto original e persuasivo, com headline forte e benefícios claros.
 
 ${ctx}
 
