@@ -112,7 +112,18 @@ Deno.serve(async (req) => {
       ? `${SYSTEM}\n\n[O usuário escolheu criar: ${hintGoal}. Pule a pergunta inicial e vá direto para coletar o briefing correspondente.]`
       : SYSTEM;
 
-    const reply = await chatCompletion([{ role: "system", content: sysContent }, ...messages]);
+    let reply: string;
+    try {
+      reply = await chatCompletion([{ role: "system", content: sysContent }, ...messages]);
+    } catch (aiErr) {
+      const msg = (aiErr as Error).message ?? "";
+      const friendly = msg.includes("insufficient_quota")
+        ? "⚠️ Cota do OpenAI esgotada. Configure GEMINI_API_KEY (gratuito) no Supabase para continuar."
+        : msg.includes("429")
+        ? "⚠️ Limite de requisições atingido. Aguarde alguns segundos e tente novamente."
+        : `⚠️ Erro na IA: ${msg.slice(0, 200)}`;
+      return json({ reply: friendly, briefing: null, summary: null, goal: null });
+    }
 
     // Detecta JSON final {done:true,...}
     let briefing: any | null = null;
