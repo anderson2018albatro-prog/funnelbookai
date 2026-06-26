@@ -149,6 +149,9 @@ function EbookDetail() {
     }
   }, [ebookQ.data?.id, ebookQ.data?.status]);
 
+  const c = useMemo(() => normalizeEbookContent(ebookQ.data?.content), [ebookQ.data?.content]);
+  const renderable = hasRenderableContent(c);
+
   useEffect(() => {
     if (c && !editedContent) setEditedContent({ ...c });
   }, [c]);
@@ -187,9 +190,6 @@ function EbookDetail() {
       return { ...prev, chapters };
     });
   }
-
-  const c = useMemo(() => normalizeEbookContent(ebookQ.data?.content), [ebookQ.data?.content]);
-  const renderable = hasRenderableContent(c);
 
   if (ebookQ.isLoading)
     return (<DashboardShell title="Ebook"><div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></DashboardShell>);
