@@ -188,6 +188,17 @@ function embedUrl(url: string): string | null {
 const ul = (items: string[]) =>
   (items || []).filter(Boolean).map((b) => `<li>${esc(b)}</li>`).join("");
 
+// Converte texto com \n ou \n\n em parágrafos HTML separados
+function proseHtml(text: string): string {
+  if (!text) return "";
+  return text
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}
+
 function starsHtml(score: number): string {
   const full = Math.floor(score);
   const half = score - full >= 0.5 ? 1 : 0;
@@ -378,13 +389,13 @@ ${ctaButton(d.cta.text || "Ver oferta oficial", "large")}`,
           ));
         break;
       case "intro":
-        if (b.text) sec.push(section(`<p class="lead">${esc(b.text)}</p>`));
+        if (b.text) sec.push(section(`<div class="lead">${proseHtml(b.text)}</div>`));
         break;
       case "what_is":
       case "story":
       case "how_it_works":
         if (b.text)
-          sec.push(section(`<h2>${esc(b.title)}</h2><p class="prose">${esc(b.text)}</p>`));
+          sec.push(section(`<h2>${esc(b.title)}</h2><div class="prose">${proseHtml(b.text)}</div>`));
         break;
       case "for_whom":
       case "benefits":
@@ -480,8 +491,12 @@ img{max-width:100%;display:block}
 .band.alt{background:var(--surface)}
 .wrap{max-width:880px;margin:0 auto}
 h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(24px,3.4vw,34px);margin-bottom:22px;letter-spacing:-.015em;line-height:1.2}
-.prose{font-size:17px;color:#334155;max-width:760px}
+.prose{font-size:17px;color:#334155;max-width:760px;line-height:1.8}
+.prose p{margin-bottom:16px}
+.prose p:last-child{margin-bottom:0}
 .lead{font-size:20px;color:#334155;font-weight:500;text-align:center;max-width:720px;margin:0 auto}
+.lead p{margin-bottom:14px}
+.lead p:last-child{margin-bottom:0}
 .figure{margin:0 auto;max-width:560px;text-align:center}
 .media{border-radius:18px;box-shadow:0 12px 40px rgba(15,23,42,.12);margin:0 auto}
 figcaption{margin-top:10px;font-size:13px;color:var(--muted)}

@@ -89,9 +89,9 @@ function parseLoose(raw: string): any {
 
 async function callAI(_lovableKey: string, prompt: string) {
   const content = await chatCompletion([
-    { role: "system", content: "Você responde APENAS com um único objeto JSON válido. Não use markdown nem cercas de código. Dentro das strings, use \\n para quebras de linha — nunca quebras de linha cruas." },
+    { role: "system", content: "Você é um escritor de ebooks. Responda APENAS com JSON válido, sem texto antes ou depois, sem markdown, sem cercas de código (```). Dentro de strings JSON use \\n para quebras de linha." },
     { role: "user", content: prompt },
-  ]);
+  ], 4096);
   if (!content) throw new Error("Resposta vazia da IA");
   return parseLoose(content);
 }
@@ -124,13 +124,10 @@ async function processInBackground(opts: {
 }) {
   const { admin, lovableKey, ebookId, userId, briefing } = opts;
   try {
-    const pages: number = briefing.paginas;
-    // ~280 palavras por página A5/A4 de ebook
-    const totalWords = pages * 280;
-    const chapters = Math.min(14, Math.max(4, Math.round(pages / 4)));
-    const wordsPerChapter = Math.max(400, Math.round(totalWords / chapters));
-    const minWords = Math.round(wordsPerChapter * 0.85);
-    const maxWords = Math.round(wordsPerChapter * 1.15);
+    // Limita capítulos e palavras para caber no limite de tokens da IA (max ~4000 tokens de saída)
+    const chapters = Math.min(7, Math.max(3, Number(briefing.capitulos) || 5));
+    // Max ~350 palavras por capítulo para não exceder o limite de tokens
+    const wordsPerChapter = 350;
 
     const prompt = `Você é um escritor profissional de ebooks. Crie um ebook COMPLETO no idioma "${briefing.idioma}", com tom "${briefing.tom_voz}".
 
@@ -139,32 +136,30 @@ Briefing:
 - Público-alvo: ${briefing.publico_alvo}
 - Promessa principal: ${briefing.promessa ?? ""}
 - Problema que resolve: ${briefing.problema ?? ""}
-- Tamanho alvo: ~${pages} páginas (aprox. ${totalWords} palavras no total)
-- Quantidade de capítulos: EXATAMENTE ${chapters}
-- Uso (venda ou material gratuito): ${briefing.uso ?? "venda"}
+- Capítulos: EXATAMENTE ${chapters}
+- Uso: ${briefing.uso ?? "venda"}
 
-Retorne APENAS JSON válido no schema:
+REGRAS OBRIGATÓRIAS — leia com atenção:
+1. Retorne APENAS um objeto JSON válido. NENHUM texto fora do JSON. NENHUMA cerca de código.
+2. Dentro das strings use \\n para quebra de linha. NUNCA quebra de linha crua.
+3. Gere EXATAMENTE ${chapters} capítulos com ~${wordsPerChapter} palavras cada.
+4. Se usar aspas dentro das strings, escape-as como \\".
+
+Schema obrigatório:
 {
-  "title": string,
-  "subtitle": string,
-  "introduction": string,
-  "summary": string[],
-  "chapters": [{ "title": string, "content": string }],
-  "conclusion": string,
-  "call_to_action": string,
-  "bonus": string[]
-}
-Regras OBRIGATÓRIAS:
-- Gere EXATAMENTE ${chapters} capítulos. Nem mais, nem menos.
-- Cada capítulo deve ter entre ${minWords} e ${maxWords} palavras (alvo ${wordsPerChapter}). Use parágrafos separados por \\n\\n e subtítulos em negrito quando fizer sentido.
-- summary: lista com o título de cada capítulo, na ordem.
-- bonus: 2 a 4 ideias acionáveis.
-- introduction: 2–4 parágrafos densos.
-- conclusion: 2–3 parágrafos amarrando a transformação prometida.
-- call_to_action: 1 parágrafo persuasivo.
-- Dentro das strings JSON, use \\n para quebras de linha. Não retorne quebras de linha cruas.`;
+  "title": "Título do ebook",
+  "subtitle": "Subtítulo",
+  "introduction": "2 parágrafos de introdução separados por \\n\\n",
+  "summary": ["Título Cap 1", "Título Cap 2"],
+  "chapters": [
+    {"title": "Título do capítulo", "content": "Conteúdo com ~${wordsPerChapter} palavras, parágrafos separados por \\n\\n"}
+  ],
+  "conclusion": "1-2 parágrafos de conclusão",
+  "call_to_action": "Um parágrafo de chamada para ação",
+  "bonus": ["Bônus 1", "Bônus 2"]
+}`;
 
-    console.log("[generate-ebook] iniciando IA", ebookId);
+    console.log("[generate-ebook] iniciando IA", ebookId, `${chapters} capítulos`);
     const ebookData = await callAI(lovableKey, prompt);
 
     const { error: updErr } = await admin

@@ -207,21 +207,34 @@ Comando extra: ${extra_prompt || "(nenhum)"}`;
 
     const raw = await chatCompletion([
       { role: "system", content:
-        "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, persuasivo e mobile-first. NUNCA copie literalmente textos da página oficial — use como referência. NUNCA recomende cookie stuffing, redirecionamento invisível ou cookie antes do clique. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown e sem cercas." },
-      { role: "user", content: `Crie uma presell premium (tipo "${presell_type}") com base no contexto abaixo.
+        "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, rico e persuasivo. Use parágrafos separados por \\n\\n nos campos de texto longo (intro, what_is, story, how_it_works). NUNCA copie literalmente textos da página oficial. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
+      { role: "user", content: `Crie uma presell profissional (tipo "${presell_type}") com base no contexto abaixo.
 
-INSTRUÇÕES ESPECÍFICAS PARA ESTE TIPO: ${guidance}
+INSTRUÇÕES ESPECÍFICAS PARA ESTE TIPO:
+${guidance}
 
-Gere texto original e persuasivo, com headline forte e benefícios claros.
-
+CONTEXTO DO PRODUTO:
 ${ctx}
 
-Retorne JSON com:
+REGRAS DE QUALIDADE:
+- headline: impactante, específica, desperta curiosidade. Mínimo 8 palavras.
+- subheadline: complementa a headline, detalha o benefício. Mínimo 10 palavras.
+- intro: 2 parágrafos ricos separados por \\n\\n. Mínimo 80 palavras total.
+- what_is: 2-3 parágrafos separados por \\n\\n explicando o produto com detalhes. Mínimo 100 palavras.
+- story (quando aplicável): narrativa envolvente com 3-4 parágrafos separados por \\n\\n. Mínimo 150 palavras.
+- how_it_works: 2-3 parágrafos explicando o processo passo a passo. Mínimo 80 palavras.
+- benefits: mínimo 5 itens específicos e persuasivos (não genéricos).
+- pros: mínimo 3 pontos positivos reais.
+- cons: 1-2 pontos de atenção honestos (aumenta credibilidade).
+- faq: mínimo 4 perguntas com respostas detalhadas.
+- Dentro de strings use \\n para quebra de linha.
+
+Retorne APENAS o JSON (sem texto antes ou depois):
 {
  "topbar": string,
  "headline": string,
  "subheadline": string,
- "rating": number (0-5, apenas para review),
+ "rating": number,
  "rating_label": string,
  "media_caption": string,
  "intro": string,
@@ -234,16 +247,16 @@ Retorne JSON com:
  "how_it_works": string,
  "proof": string[],
  "trust_badges": string[],
- "comparison": {"product_a":string,"product_b":string,"rows":[{"feature":string,"a":string,"b":string}],"winner":string} | null,
- "quiz": {"title":string,"questions":[{"question":string,"options":string[]}],"result":string} | null,
+ "comparison": null,
+ "quiz": null,
  "video_title": string,
- "video_url": string,
+ "video_url": "",
  "cookie_notice": string,
  "cta_text": string,
  "cta_note": string,
  "faq": [{"q":string,"a":string}]
 }` },
-    ]);
+    ], 3000);
     if (!raw) throw new Error("Resposta vazia da IA");
     const p = JSON.parse(stripFences(raw));
 

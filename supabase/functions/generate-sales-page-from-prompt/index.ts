@@ -201,9 +201,9 @@ Retorne APENAS JSON válido:
 }`;
 
     const raw = await chatCompletion([
-      { role: "system", content: "Você responde APENAS com JSON válido, sem markdown e sem cercas de código." },
+      { role: "system", content: "Você é um copywriter de alta conversão. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
       { role: "user", content: prompt },
-    ]);
+    ], 2500);
     if (!raw) throw new Error("Resposta vazia da IA");
     const sp = JSON.parse(stripFences(raw));
     sp.button_url = sp.button_url || form.button_url || "#";
