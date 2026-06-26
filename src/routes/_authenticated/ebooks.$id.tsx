@@ -292,13 +292,20 @@ function EbookDetail() {
       function writeBody(text: string) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(11);
-        const lines = doc.splitTextToSize(text, maxW) as string[];
-        for (const line of lines) {
-          ensure(16);
-          doc.text(line, margin, y);
-          y += 16;
+        // Split on double newlines (paragraph breaks) then wrap each paragraph
+        const paragraphs = text.split(/\n\n+/);
+        for (const para of paragraphs) {
+          const clean = para.replace(/\n/g, " ").trim();
+          if (!clean) continue;
+          const lines = doc.splitTextToSize(clean, maxW) as string[];
+          for (const line of lines) {
+            ensure(16);
+            doc.text(line, margin, y);
+            y += 16;
+          }
+          y += 10; // espaço entre parágrafos
         }
-        y += 6;
+        y += 4;
       }
 
       doc.setFillColor(99, 102, 241);
@@ -306,29 +313,29 @@ function EbookDetail() {
       doc.setTextColor(255);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(32);
-      const tLines = doc.splitTextToSize(c.title ?? title, maxW) as string[];
+      const tLines = doc.splitTextToSize(ec.title ?? title, maxW) as string[];
       doc.text(tLines, pageW / 2, pageH / 2 - 30, { align: "center" });
-      if (c.subtitle) {
+      if (ec.subtitle) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(16);
-        const sLines = doc.splitTextToSize(c.subtitle, maxW) as string[];
+        const sLines = doc.splitTextToSize(ec.subtitle, maxW) as string[];
         doc.text(sLines, pageW / 2, pageH / 2 + 20, { align: "center" });
       }
       doc.setTextColor(0);
       newPage();
 
-      const summary = asArray(c.summary);
-      const chapters = Array.isArray(c.chapters) ? c.chapters : [];
-      const bonus = asArray(c.bonus);
+      const summary = asArray(ec.summary);
+      const chapters = Array.isArray(ec.chapters) ? ec.chapters : [];
+      const bonus = asArray(ec.bonus);
 
       if (summary.length) {
         writeHeading("Sumário", 22);
         summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
         newPage();
       }
-      if (c.introduction) {
+      if (ec.introduction) {
         writeHeading("Introdução", 20);
-        writeBody(c.introduction);
+        writeBody(ec.introduction);
       }
       for (let i = 0; i < chapters.length; i++) {
         const ch: any = chapters[i];
@@ -343,17 +350,18 @@ function EbookDetail() {
             y += imgH + 14;
           }
         }
-        writeBody(String(ch?.content ?? ""));
+        const chContent = String(ch?.content ?? "").trim();
+        if (chContent) writeBody(chContent);
       }
-      if (c.conclusion) {
+      if (ec.conclusion) {
         newPage();
         writeHeading("Conclusão", 20);
-        writeBody(c.conclusion);
+        writeBody(ec.conclusion);
       }
-      if (c.call_to_action) {
+      if (ec.call_to_action) {
         ensure(80);
         writeHeading("Próximos passos", 18);
-        writeBody(c.call_to_action);
+        writeBody(ec.call_to_action);
       }
       if (bonus.length) {
         newPage();
@@ -367,7 +375,7 @@ function EbookDetail() {
         addPageNumber(p - 1);
       }
 
-      const safe = (c.title ?? title).replace(/[^\w\u00C0-\u017F\s-]/g, "").trim().slice(0, 60) || "ebook";
+      const safe = (ec.title ?? title).replace(/[^\w\u00C0-\u017F\s-]/g, "").trim().slice(0, 60) || "ebook";
       doc.save(`${safe}.pdf`);
       toast.success("PDF gerado");
     } catch (e: any) {

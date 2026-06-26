@@ -24,10 +24,10 @@ function stripFences(s: string) {
   if (c.startsWith("```")) {
     c = c.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
   }
-  // Trim to outermost { ... } if there's extra prose
+  // Trim to outermost { ... } if there's extra prose before or after
   const first = c.indexOf("{");
   const last = c.lastIndexOf("}");
-  if (first > 0 && last > first) c = c.slice(first, last + 1);
+  if (first >= 0 && last > first) c = c.slice(first, last + 1);
   return c;
 }
 
@@ -89,9 +89,9 @@ function parseLoose(raw: string): any {
 
 async function callAI(_lovableKey: string, prompt: string) {
   const content = await chatCompletion([
-    { role: "system", content: "Você é um escritor de ebooks. Responda APENAS com JSON válido, sem texto antes ou depois, sem markdown, sem cercas de código (```). Dentro de strings JSON use \\n para quebras de linha." },
+    { role: "system", content: "Você é um escritor profissional de ebooks. REGRA ABSOLUTA: responda APENAS com um objeto JSON válido. Nenhum texto antes, nenhum texto depois, nenhuma cerca de código (```). Dentro de strings JSON use \\n para quebrar linhas, nunca quebre linhas literais dentro de strings." },
     { role: "user", content: prompt },
-  ], 4096);
+  ], 6000);
   if (!content) throw new Error("Resposta vazia da IA");
   return parseLoose(content);
 }
@@ -124,39 +124,48 @@ async function processInBackground(opts: {
 }) {
   const { admin, lovableKey, ebookId, userId, briefing } = opts;
   try {
-    // Limita capítulos e palavras para caber no limite de tokens da IA (max ~4000 tokens de saída)
-    const chapters = Math.min(7, Math.max(3, Number(briefing.capitulos) || 5));
-    // Max ~350 palavras por capítulo para não exceder o limite de tokens
-    const wordsPerChapter = 350;
+    // 5 capítulos máx para o budget de tokens (6000 tokens de saída ≈ 75s no gpt-4o-mini)
+    const chapters = Math.min(5, Math.max(3, Number(briefing.capitulos) || 5));
 
-    const prompt = `Você é um escritor profissional de ebooks. Crie um ebook COMPLETO no idioma "${briefing.idioma}", com tom "${briefing.tom_voz}".
+    const prompt = `Crie um ebook PROFISSIONAL E COMPLETO no idioma "${briefing.idioma || "Português"}", com tom "${briefing.tom_voz || "profissional e acessível"}".
 
-Briefing:
+BRIEFING DO EBOOK:
 - Tema/Nicho: ${briefing.tema}
 - Público-alvo: ${briefing.publico_alvo}
-- Promessa principal: ${briefing.promessa ?? ""}
-- Problema que resolve: ${briefing.problema ?? ""}
-- Capítulos: EXATAMENTE ${chapters}
-- Uso: ${briefing.uso ?? "venda"}
+- Promessa principal: ${briefing.promessa || "transformar a vida do leitor"}
+- Problema que resolve: ${briefing.problema || "dificuldades na área"}
+- Número de capítulos: EXATAMENTE ${chapters}
+- Uso: ${briefing.uso || "venda"}
 
-REGRAS OBRIGATÓRIAS — leia com atenção:
-1. Retorne APENAS um objeto JSON válido. NENHUM texto fora do JSON. NENHUMA cerca de código.
-2. Dentro das strings use \\n para quebra de linha. NUNCA quebra de linha crua.
-3. Gere EXATAMENTE ${chapters} capítulos com ~${wordsPerChapter} palavras cada.
-4. Se usar aspas dentro das strings, escape-as como \\".
+PADRÃO DE QUALIDADE — cada capítulo deve ter:
+• Introdução do tema do capítulo (1 parágrafo)
+• 2-3 conceitos principais com explicação detalhada
+• Pelo menos 1 exemplo prático real e aplicável
+• Dicas concretas e acionáveis para o público "${briefing.publico_alvo}"
+• Mini-resumo ou próximo passo ao final
+• Mínimo de 500 palavras por capítulo
 
-Schema obrigatório:
+REGRAS TÉCNICAS ABSOLUTAS:
+1. Retorne APENAS o JSON. Sem texto antes. Sem texto depois. Sem cercas de código.
+2. Use \\n\\n para separar parágrafos dentro de strings. NUNCA quebras de linha literais.
+3. Escape aspas dentro de strings como \\".
+4. O array "chapters" deve ter EXATAMENTE ${chapters} objetos.
+
+SCHEMA (preencha todos os campos com conteúdo rico e específico):
 {
-  "title": "Título do ebook",
-  "subtitle": "Subtítulo",
-  "introduction": "2 parágrafos de introdução separados por \\n\\n",
-  "summary": ["Título Cap 1", "Título Cap 2"],
+  "title": "Título criativo e atraente do ebook",
+  "subtitle": "Subtítulo que complementa e detalha a promessa",
+  "introduction": "Introdução motivacional de 2-3 parágrafos separados por \\n\\n explicando o problema, a solução e o que o leitor vai conquistar",
+  "summary": ["Título Capítulo 1", "Título Capítulo 2"],
   "chapters": [
-    {"title": "Título do capítulo", "content": "Conteúdo com ~${wordsPerChapter} palavras, parágrafos separados por \\n\\n"}
+    {
+      "title": "Título específico do capítulo",
+      "content": "Conteúdo rico de 500+ palavras com conceitos, exemplos e dicas. Parágrafos separados por \\n\\n."
+    }
   ],
-  "conclusion": "1-2 parágrafos de conclusão",
-  "call_to_action": "Um parágrafo de chamada para ação",
-  "bonus": ["Bônus 1", "Bônus 2"]
+  "conclusion": "Conclusão inspiradora de 2 parágrafos que recapitula os principais aprendizados e incentiva a ação",
+  "call_to_action": "Chamada para ação clara e motivadora",
+  "bonus": ["Bônus prático 1", "Bônus prático 2", "Bônus prático 3"]
 }`;
 
     console.log("[generate-ebook] iniciando IA", ebookId, `${chapters} capítulos`);
