@@ -1,0 +1,16 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".output/public",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "SUPABASE_PROJECT_ID": "nygbgczhydtzyfgbqwkr",
+    "SUPABASE_URL": "https://nygbgczhydtzyfgbqwkr.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55Z2JnY3poeWR0enlmZ2Jxd2tyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MDg0NDIsImV4cCI6MjA5NzQ4NDQ0Mn0.P0gPHRrYnar6g3BEJtf2kB2x230pP1Hbu5g8DpZA-8s",
+    "VITE_SUPABASE_PROJECT_ID": "nygbgczhydtzyfgbqwkr",
+    "VITE_SUPABASE_URL": "https://nygbgczhydtzyfgbqwkr.supabase.co",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55Z2JnY3poeWR0enlmZ2Jxd2tyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MDg0NDIsImV4cCI6MjA5NzQ4NDQ0Mn0.P0gPHRrYnar6g3BEJtf2kB2x230pP1Hbu5g8DpZA-8s"
+  }
+}
