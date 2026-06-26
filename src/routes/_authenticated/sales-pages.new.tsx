@@ -89,9 +89,21 @@ function NewSalesPage() {
               <Label>Idioma</Label>
               <select className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
                 value={form.language} onChange={(e) => set("language", e.target.value)}>
-                <option value="pt-BR">Português</option>
-                <option value="en">Inglês</option>
-                <option value="es">Espanhol</option>
+                <option value="pt-BR">🇧🇷 Português (Brasil)</option>
+                <option value="pt-PT">🇵🇹 Português (Portugal)</option>
+                <option value="en">🇺🇸 Inglês</option>
+                <option value="es">🇪🇸 Espanhol</option>
+                <option value="fr">🇫🇷 Francês</option>
+                <option value="it">🇮🇹 Italiano</option>
+                <option value="de">🇩🇪 Alemão</option>
+                <option value="ja">🇯🇵 Japonês</option>
+                <option value="zh">🇨🇳 Mandarim</option>
+                <option value="ru">🇷🇺 Russo</option>
+                <option value="ar">🇸🇦 Árabe</option>
+                <option value="hi">🇮🇳 Hindi</option>
+                <option value="nl">🇳🇱 Holandês</option>
+                <option value="pl">🇵🇱 Polonês</option>
+                <option value="tr">🇹🇷 Turco</option>
               </select>
             </div>
             <div>

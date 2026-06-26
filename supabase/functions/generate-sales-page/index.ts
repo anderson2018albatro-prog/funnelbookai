@@ -245,7 +245,9 @@ Deno.serve(async (req) => {
     if (userErr || !userData.user) return json({ error: "Não autenticado" }, 401);
     const userId = userData.user.id;
 
-    const { ebookId } = await req.json().catch(() => ({}));
+    const body2 = await req.json().catch(() => ({}));
+    const { ebookId } = body2;
+    const testMode = body2.test_mode === true;
     if (!ebookId) return json({ error: "ebookId obrigatório" }, 400);
 
     const { data: ebook, error: ebErr } = await supabase
@@ -284,6 +286,32 @@ Deno.serve(async (req) => {
         .select("id").single();
       if (insErr) return json({ error: insErr.message }, 500);
       pageId = created.id;
+    }
+
+    if (testMode) {
+      const ec = ebook.content as any;
+      const mockSp = {
+        headline: `Descubra o Método ${ebook.title}`,
+        subheadline: ec?.subtitle ?? "O guia definitivo para transformar sua vida",
+        promessa_principal: ec?.briefing?.promessa ?? "Resultados reais em 30 dias",
+        beneficios: (ec?.summary ?? []).slice(0, 5).map((s: string) => s) || ["Benefício 1","Benefício 2","Benefício 3"],
+        para_quem: ["Iniciantes que querem começar do zero", "Quem busca resultados rápidos e duradouros"],
+        aprendizado: (ec?.chapters ?? []).slice(0, 5).map((c: any) => c.title) || [],
+        oferta: "Acesso completo por apenas R$ 97",
+        price: "R$ 97",
+        bonus: ["Bônus: Guia de implementação rápida", "Bônus: Planilha de acompanhamento"],
+        garantia: "30 dias de garantia incondicional",
+        faq: [
+          { pergunta: "Para quem é?", resposta: ec?.briefing?.publico_alvo ?? "Para qualquer pessoa." },
+          { pergunta: "Como acesso?", resposta: "Por e-mail em até 5 minutos após a compra." },
+        ],
+        cta: "Garantir meu acesso agora",
+      };
+      const title = mockSp.headline;
+      const html = buildHtml(mockSp, title);
+      const blocks = buildBlocks(mockSp, title);
+      await admin.from("sales_pages").update({ title, html_content: html, blocks, status: "completed", error_message: null }).eq("id", pageId);
+      return json({ pageId, slug, status: "completed", test_mode: true }, 201);
     }
 
     // @ts-ignore

@@ -283,14 +283,20 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
+    const testMode = body.test_mode === true;
     let { source_url = "", affiliate_url = "", presell_type = "review",
       niche = "", target_audience = "", tone = "", language = "pt-BR",
       extra_prompt = "", manual_info = "" } = body;
 
-    affiliate_url = String(affiliate_url || "").trim();
-    if (!affiliate_url) return json({ error: "Informe o link de afiliado" }, 400);
-    if (!isValidUrl(affiliate_url)) return json({ error: "Link de afiliado inválido. Use http(s)://" }, 400);
-    if (source_url && !isValidUrl(source_url)) return json({ error: "Link da página oficial inválido" }, 400);
+    if (testMode) {
+      affiliate_url = String(affiliate_url || "https://exemplo.com/afiliado").trim();
+      source_url = String(source_url || "").trim();
+    } else {
+      affiliate_url = String(affiliate_url || "").trim();
+      if (!affiliate_url) return json({ error: "Informe o link de afiliado" }, 400);
+      if (!isValidUrl(affiliate_url)) return json({ error: "Link de afiliado inválido. Use http(s)://" }, 400);
+      if (source_url && !isValidUrl(source_url)) return json({ error: "Link da página oficial inválido" }, 400);
+    }
     if (!VALID_TYPES.includes(presell_type)) presell_type = "review";
 
     const hostBase = source_url ? (() => { try { return new URL(source_url).hostname.replace(/^www\./, ""); } catch { return ""; } })() : "";
@@ -300,6 +306,38 @@ Deno.serve(async (req) => {
       const { data: ex } = await admin.from("presells").select("id").eq("slug", slug).maybeSingle();
       if (!ex) break;
       n++; slug = `${base}-${n}`;
+    }
+
+    if (testMode) {
+      const mockP = {
+        topbar: "Análise Independente | Conteúdo Informativo",
+        headline: `Review Completo: ${niche || "Produto"} — Vale a Pena?`,
+        subheadline: `Analisamos em detalhes para que você tome a melhor decisão`,
+        rating: 4.7, rating_label: "Nota geral",
+        intro: `Nesta análise completa de ${niche || "este produto"}, vamos mostrar tudo que você precisa saber antes de decidir. Avaliamos funcionalidades, benefícios, pontos de atenção e para quem realmente vale a pena.\n\n[MODO MOCK — gerado sem IA para teste]`,
+        what_is: `${niche || "Este produto"} é uma solução desenvolvida para ${target_audience || "pessoas que querem resultados"} que buscam uma forma eficiente de alcançar seus objetivos.`,
+        for_whom: ["Iniciantes que querem começar do zero", "Quem já tentou outras soluções sem sucesso", "Pessoas que buscam resultados com menos esforço"],
+        benefits: ["Resultados comprovados em menos de 30 dias", "Suporte especializado 24/7", "Método passo a passo sem complicações", "Acesso vitalício às atualizações"],
+        pros: ["Fácil de usar mesmo para iniciantes", "Suporte rápido e eficiente", "Garantia de 30 dias sem burocracia"],
+        cons: ["Requer dedicação e consistência", "Resultados variam por pessoa"],
+        proof: ["Mais de 10.000 clientes satisfeitos", "Metodologia validada por especialistas"],
+        trust_badges: ["Compra 100% segura", "Garantia de 30 dias", "Suporte especializado"],
+        faq: [
+          { q: "Para quem é?", a: `Para ${target_audience || "qualquer pessoa"} que quer resultados reais.` },
+          { q: "Tem garantia?", a: "Sim, 30 dias de garantia incondicional." },
+          { q: "Como acesso?", a: "Por e-mail em até 5 minutos após a compra." },
+        ],
+        cta_text: "Acessar site oficial",
+        cta_note: "Você será redirecionado para o site oficial do produto.",
+      };
+      const blocks = buildBlocks(mockP, presell_type, affiliate_url, "", DEFAULT_DISCLOSURE);
+      const title = mockP.headline;
+      const { data: created, error: insErr } = await admin.from("presells").insert({
+        user_id: userId, title, slug, source_url, affiliate_url, presell_type, tone, language,
+        status: "completed", is_published: true, blocks, disclosure_text: DEFAULT_DISCLOSURE,
+      }).select("id").single();
+      if (insErr) return json({ error: insErr.message }, 500);
+      return json({ presellId: created.id, slug, status: "completed", test_mode: true }, 201);
     }
 
     const { data: created, error: insErr } = await admin.from("presells").insert({

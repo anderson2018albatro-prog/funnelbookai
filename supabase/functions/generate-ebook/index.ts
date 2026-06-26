@@ -96,6 +96,25 @@ async function callAI(_lovableKey: string, prompt: string) {
   return parseLoose(content);
 }
 
+function mockEbookContent(briefing: any): any {
+  const tema = briefing.tema || "Desenvolvimento Pessoal";
+  const n = typeof briefing.capitulos === "number" ? Math.min(15, Math.max(3, briefing.capitulos)) : 5;
+  const chapters = Array.from({ length: n }, (_, i) => ({
+    title: `Capítulo ${i + 1}: ${["Fundamentos Essenciais","Estratégias Avançadas","Implementação Prática","Superando Obstáculos","Resultados e Próximos Passos","Mindset de Crescimento","Ferramentas e Recursos","Cases de Sucesso","Erros Comuns","Aceleração de Resultados","Sustentabilidade","Comunidade e Suporte","Automação","Escalabilidade","Legado"][i] || `Módulo ${i + 1}`}`,
+    content: `Este capítulo aborda aspectos fundamentais de ${tema}.\n\nConteúdo completo será gerado pela IA quando você usar o modo real. Este é apenas um conteúdo de demonstração para testar o fluxo sem gastar créditos de IA.\n\nO texto real terá entre 400 e 600 palavras com exemplos práticos, estratégias aplicáveis e referências relevantes para o público de ${briefing.publico_alvo || "este ebook"}.`,
+  }));
+  return {
+    title: `${tema}: O Guia Definitivo`,
+    subtitle: `Tudo que você precisa saber para transformar sua vida com ${tema}`,
+    introduction: `Bem-vindo ao guia definitivo sobre ${tema}. Este ebook foi criado especialmente para ${briefing.publico_alvo || "você"}.\n\nNeste material você vai encontrar estratégias práticas, exemplos reais e um passo a passo completo para alcançar ${briefing.promessa || "seus objetivos"}.\n\n[MODO MOCK — conteúdo real gerado pela IA no modo normal]`,
+    summary: chapters.map((c) => c.title),
+    chapters,
+    conclusion: `Chegamos ao final desta jornada sobre ${tema}. Você agora tem todas as ferramentas necessárias para dar o próximo passo e transformar sua realidade.\n\n[MODO MOCK — conteúdo real gerado pela IA no modo normal]`,
+    call_to_action: `Não deixe para depois! Comece hoje mesmo a aplicar o que aprendeu. Seu sucesso começa com uma ação.`,
+    bonus: ["Checklist de implementação rápida", "Planilha de acompanhamento de resultados", "Acesso à comunidade exclusiva"],
+  };
+}
+
 async function processInBackground(opts: {
   admin: ReturnType<typeof createClient>;
   lovableKey: string;
@@ -201,19 +220,33 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
+    const testMode = body.test_mode === true;
     const paginas = Math.min(Math.max(Number(body.paginas) || Number(body.capitulos) * 4 || 25, 8), 50);
+    const capitulos = Number(body.capitulos) || 5;
     const briefing = {
-      tema: body.tema,
-      publico_alvo: body.publico_alvo,
+      tema: body.tema || (testMode ? "Marketing Digital para Iniciantes" : undefined),
+      publico_alvo: body.publico_alvo || (testMode ? "Empreendedores iniciantes" : undefined),
       promessa: body.promessa ?? "",
       problema: body.problema ?? "",
       idioma: body.idioma ?? "Português",
       tom_voz: body.tom_voz ?? "Profissional e acessível",
       paginas,
+      capitulos,
       uso: body.uso ?? "venda",
     };
     if (!briefing.tema || !briefing.publico_alvo) {
       return json({ error: "tema e publico_alvo são obrigatórios" }, 400);
+    }
+
+    if (testMode) {
+      // Mock: sem IA, sem crédito
+      const mockContent = mockEbookContent(briefing);
+      const { data: ebook, error: insErr } = await admin.from("ebooks").insert({
+        user_id: userId, title: mockContent.title, niche: briefing.tema,
+        content: { ...mockContent, briefing }, status: "completed",
+      }).select("id").single();
+      if (insErr) return json({ error: insErr.message }, 500);
+      return json({ ebookId: ebook.id, status: "completed", test_mode: true }, 201);
     }
 
     // Checa créditos
