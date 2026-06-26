@@ -22,7 +22,7 @@ export type BlockMap = {
   para_quem: { visible: boolean; title: string; items: string[] };
   aprendizado: { visible: boolean; title: string; items: string[] };
   bonus: { visible: boolean; title: string; items: string[] };
-  depoimentos: { visible: boolean; title: string; items: { name: string; text: string }[] };
+  depoimentos: { visible: boolean; title: string; items: { name: string; text: string; stars?: number; placeholder?: boolean }[]; is_placeholder?: boolean };
   oferta: { visible: boolean; title: string; description: string; price: string; cta_text: string; cta_url: string };
   garantia: { visible: boolean; title: string; text: string };
   faq: { visible: boolean; title: string; items: { pergunta: string; resposta: string }[] };
@@ -171,8 +171,8 @@ export function renderBlocksToHtml(blocks: SalesBlocks, fallbackTitle: string): 
       case "depoimentos":
         if (!(b.items?.length)) break;
         sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><div class="testis">${b.items
-          .map((t: any) => `<blockquote><p>"${esc(t.text)}"</p><cite>— ${esc(t.name)}</cite></blockquote>`)
-          .join("")}</div></section>`);
+          .map((t: any) => `<blockquote>${t.stars ? `<div class="t-stars">${"⭐".repeat(Math.min(5, t.stars))}</div>` : ""}<p>"${esc(t.text)}"</p><cite>— ${esc(t.name)}</cite></blockquote>`)
+          .join("")}</div>${b.is_placeholder ? `<p class="placeholder-notice">⚠️ Depoimentos de exemplo — substitua pelos reais antes de publicar.</p>` : ""}</section>`);
         break;
       case "oferta":
         sec.push(`<section class="wrap" id="oferta"><h2>${esc(b.title)}</h2>
@@ -235,6 +235,9 @@ ul.feat li{background:#f1f5f9;padding:16px 20px;border-radius:12px;border-left:4
 .testis{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 .testis blockquote{background:#f8fafc;padding:20px;border-radius:12px;border-left:4px solid #8b5cf6}
 .testis cite{display:block;margin-top:10px;font-weight:600;color:#64748b;font-style:normal}
+.t-stars{font-size:16px;margin-bottom:8px}
+.placeholder-notice{text-align:center;font-size:12px;color:#94a3b8;margin-top:16px;font-style:italic}
+.offer .cta{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
 details{background:#f8fafc;padding:16px 20px;border-radius:10px;margin-bottom:10px;cursor:pointer}
 details summary{font-weight:600;list-style:none}
 .final{background:#0f172a;color:#fff;padding:64px 16px;text-align:center}
