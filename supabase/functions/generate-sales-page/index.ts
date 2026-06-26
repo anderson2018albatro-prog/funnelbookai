@@ -36,7 +36,7 @@ function stripFences(s: string) {
   let c = s.trim();
   if (c.startsWith("```")) c = c.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
   const first = c.indexOf("{"); const last = c.lastIndexOf("}");
-  if (first > 0 && last > first) c = c.slice(first, last + 1);
+  if (first >= 0 && last > first) c = c.slice(first, last + 1);
   return c;
 }
 
@@ -179,23 +179,35 @@ Promessa: ${ec?.briefing?.promessa ?? ""}
 Problema que resolve: ${ec?.briefing?.problema ?? ""}
 Capítulos: ${(ec?.summary ?? []).join(" | ")}`;
 
-    const prompt = `Você é um copywriter de alta conversão. Crie uma página de vendas em português para este ebook:
+    const prompt = `Crie uma página de vendas de ALTA CONVERSÃO em português para este ebook:
 
 ${ctx}
 
-Retorne APENAS JSON válido:
+PADRÃO DE QUALIDADE:
+- headline: impactante, com promessa clara e específica (mínimo 8 palavras)
+- subheadline: complementa a headline e aumenta a curiosidade (mínimo 12 palavras)
+- promessa_principal: 2-3 frases que detalham o maior benefício transformacional
+- beneficios: mínimo 6 benefícios específicos e mensuráveis (não genéricos)
+- para_quem: mínimo 5 perfis específicos de público-alvo
+- aprendizado: mínimo 6 tópicos específicos que o leitor vai dominar
+- bonus: mínimo 3 bônus com descrição do valor percebido
+- garantia: texto de garantia que remove o risco da compra
+- faq: mínimo 5 perguntas respondendo objeções reais de compra
+- cta: texto do botão urgente e acionável
+
+Retorne APENAS JSON válido (sem texto fora do JSON, sem cercas de código):
 {
-  "headline": string,
-  "subheadline": string,
-  "promessa_principal": string,
-  "beneficios": string[],
-  "para_quem": string[],
-  "aprendizado": string[],
-  "oferta": string,
-  "bonus": string[],
-  "garantia": string,
-  "faq": [{ "pergunta": string, "resposta": string }],
-  "cta": string
+  "headline": "headline poderosa aqui",
+  "subheadline": "subheadline complementar aqui",
+  "promessa_principal": "promessa detalhada aqui",
+  "beneficios": ["benefício específico 1", "benefício específico 2"],
+  "para_quem": ["perfil específico 1", "perfil específico 2"],
+  "aprendizado": ["tópico específico 1", "tópico específico 2"],
+  "oferta": "descrição da oferta com preço e condições",
+  "bonus": ["Bônus 1: descrição", "Bônus 2: descrição"],
+  "garantia": "texto da garantia",
+  "faq": [{"pergunta": "pergunta real", "resposta": "resposta detalhada"}],
+  "cta": "texto do botão"
 }`;
 
     const raw = await chatCompletion([

@@ -174,30 +174,42 @@ async function processInBackground(opts: {
 }) {
   const { admin, pageId, form } = opts;
   try {
-    const prompt = `Você é um copywriter de alta conversão. Crie uma página de vendas em ${form.language || "pt-BR"} com tom "${form.tone || "persuasivo"}" para o tipo "${form.page_type || "vendas"}".
+    const prompt = `Crie uma página de vendas de ALTA CONVERSÃO em ${form.language || "pt-BR"} com tom "${form.tone || "persuasivo"}" para o tipo "${form.page_type || "vendas"}".
 
-Produto: ${form.product_name || "(não informado)"}
-Nicho: ${form.niche || "(não informado)"}
-Público-alvo: ${form.target_audience || "(não informado)"}
-Oferta: ${form.offer || "(não informada)"}
-Link do botão: ${form.button_url || ""}
-Comando extra do usuário: ${form.prompt || ""}
+BRIEFING DO PRODUTO:
+- Produto/Serviço: ${form.product_name || "(não informado)"}
+- Nicho: ${form.niche || "(não informado)"}
+- Público-alvo: ${form.target_audience || "(não informado)"}
+- Promessa principal: ${form.promessa || "(não informada)"}
+- Oferta/Preço: ${form.offer || "(não informada)"}
+- Link do botão: ${form.button_url || ""}
+- Instruções extras: ${form.prompt || "nenhuma"}
 
-Retorne APENAS JSON válido:
+PADRÃO DE QUALIDADE OBRIGATÓRIO:
+- headline: impactante com benefício claro e específico (mínimo 8 palavras)
+- subheadline: complementa e aprofunda a promessa (mínimo 12 palavras)
+- promessa_principal: 2-3 frases transformacionais sobre o maior resultado
+- beneficios: mínimo 6 benefícios específicos e mensuráveis para o público-alvo
+- para_quem: mínimo 5 perfis específicos que se identificam com o produto
+- aprendizado: mínimo 6 tópicos concretos do que o cliente vai ganhar/aprender
+- bonus: mínimo 3 bônus com descrição de valor percebido
+- faq: mínimo 5 perguntas respondendo objeções reais de compra
+
+Retorne APENAS JSON válido (sem texto fora, sem cercas de código):
 {
-  "headline": string,
-  "subheadline": string,
-  "promessa_principal": string,
-  "beneficios": string[],
-  "para_quem": string[],
-  "aprendizado": string[],
-  "oferta": string,
-  "price": string,
-  "bonus": string[],
-  "garantia": string,
-  "faq": [{ "pergunta": string, "resposta": string }],
-  "cta": string,
-  "button_url": string
+  "headline": "headline poderosa",
+  "subheadline": "subheadline complementar",
+  "promessa_principal": "promessa transformacional detalhada",
+  "beneficios": ["benefício específico 1"],
+  "para_quem": ["perfil 1"],
+  "aprendizado": ["tópico 1"],
+  "oferta": "descrição da oferta",
+  "price": "preço formatado",
+  "bonus": ["Bônus 1: descrição e valor"],
+  "garantia": "texto da garantia sem risco",
+  "faq": [{"pergunta": "pergunta", "resposta": "resposta detalhada"}],
+  "cta": "texto do botão urgente",
+  "button_url": "${form.button_url || "#"}"
 }`;
 
     const raw = await chatCompletion([
