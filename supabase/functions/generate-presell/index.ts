@@ -1,7 +1,4 @@
 // Edge Function: generate-presell
-// Ethical presell generation. Extracts metadata from the official product page,
-// then asks the AI to write an original presell. NEVER fires affiliate cookies,
-// NEVER injects iframes, NEVER auto-redirects. CTAs are real <a> tags only.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { chatCompletion } from "../_shared/ai.ts";
 
@@ -13,7 +10,13 @@ const corsHeaders = {
 const json = (d: unknown, s = 200) =>
   new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-const VALID_TYPES = ["review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice", "native_ad", "story", "listicle"];
+const VALID_TYPES = [
+  "review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice",
+  "native_ad", "story", "listicle",
+  "age_gate", "gender_gate", "country_gate", "captcha_gate", "coupon", "countdown",
+];
+
+const GATE_TYPES = ["age_gate", "gender_gate", "country_gate", "captcha_gate"];
 
 const DEFAULT_DISCLOSURE =
   "Esta página pode conter links de afiliado. Podemos receber comissão por compras realizadas, sem custo adicional para você.";
@@ -21,9 +24,10 @@ const DEFAULT_DISCLOSURE =
 const DEFAULT_THEME = { primary: "#6366f1", accent: "#06b6d4", bg: "#ffffff", text: "#0f172a" };
 
 function slugify(s: string) {
-  return (s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  return (s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 60) || "presell");
 }
+
 function stripFences(s: string) {
   let c = s.trim();
   if (c.startsWith("```")) c = c.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
@@ -31,6 +35,37 @@ function stripFences(s: string) {
   if (f >= 0 && l > f) c = c.slice(f, l + 1);
   return c;
 }
+
+// Repara JSON com newlines literais dentro de strings (erro comum das IAs)
+function repairJson(s: string): string {
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  let inStr = false, escaped = false, out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escaped) { out += c; escaped = false; continue; }
+    if (c === "\\") { out += c; escaped = true; continue; }
+    if (c === '"') { out += c; inStr = !inStr; continue; }
+    if (inStr && c === "\n") { out += "\\n"; continue; }
+    if (inStr && c === "\r") { out += "\\r"; continue; }
+    if (inStr && c === "\t") { out += "\\t"; continue; }
+    out += c;
+  }
+  return out;
+}
+
+function safeJsonParse(raw: string): any {
+  const cleaned = repairJson(stripFences(raw));
+  try { return JSON.parse(cleaned); }
+  catch (e1) {
+    // Second attempt: strip everything outside first { ... }
+    const f = cleaned.indexOf("{"), l = cleaned.lastIndexOf("}");
+    if (f >= 0 && l > f) {
+      try { return JSON.parse(cleaned.slice(f, l + 1)); } catch { /* noop */ }
+    }
+    throw e1;
+  }
+}
+
 function isValidUrl(u: string) {
   try { const x = new URL(u); return x.protocol === "http:" || x.protocol === "https:"; } catch { return false; }
 }
@@ -46,6 +81,13 @@ function defaultOrderFor(type: string): string[] {
     case "native_ad": return ["topbar","headline","media","intro","story","what_is","benefits","proof","cta","faq"];
     case "story": return ["topbar","headline","story","what_is","how_it_works","benefits","pros","trust_badges","cta","faq"];
     case "listicle": return ["topbar","headline","media","intro","benefits","pros","proof","trust_badges","cta","faq"];
+    case "age_gate":
+    case "gender_gate":
+    case "country_gate":
+    case "captcha_gate":
+      return ["topbar","headline","cta"];
+    case "coupon": return ["topbar","headline","coupon_widget","benefits","cta"];
+    case "countdown": return ["topbar","headline","countdown_timer","benefits","trust_badges","cta"];
     default: return ["topbar","headline","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","trust_badges","cta","faq"];
   }
 }
@@ -137,99 +179,190 @@ function buildBlocks(p: any, type: string, affUrl: string, productImage: string,
       },
       video: { visible: type === "vsl", title: p.video_title ?? "Assista", video_url: p.video_url ?? "" },
       cookie_notice: {
-        visible: type === "bridge" || type === "cookie_notice",
-        text: p.cookie_notice ?? "Ao clicar no botão você será redirecionado para o site oficial. Nenhum cookie é definido antes do clique.",
+        visible: type === "bridge" || type === "cookie_notice" || GATE_TYPES.includes(type),
+        text: p.cookie_notice ?? "Ao clicar você será redirecionado para o site oficial.",
       },
       cta: {
         visible: true,
         text: p.cta_text ?? "Acessar site oficial",
         note: p.cta_note ?? "Você será redirecionado para o site oficial do produto.",
-        sticky: true,
+        sticky: !GATE_TYPES.includes(type),
       },
-      faq: {
-        visible: (p.faq ?? []).length > 0,
-        title: "Perguntas frequentes",
-        items: p.faq ?? [],
+      faq: { visible: (p.faq ?? []).length > 0, title: "Perguntas frequentes", items: p.faq ?? [] },
+      countdown_timer: {
+        visible: type === "countdown",
+        minutes: typeof p.countdown_minutes === "number" ? p.countdown_minutes : 15,
+        message: p.urgency_message ?? "⏰ Oferta por tempo limitado!",
+      },
+      coupon_widget: {
+        visible: type === "coupon",
+        code: p.coupon_code ?? "PROMO10",
+        discount_pct: p.discount_pct ?? "10% de desconto",
+        expires_minutes: typeof p.countdown_minutes === "number" ? p.countdown_minutes : 20,
       },
     },
   };
 }
 
+// ─────────────────────────────────────────────
+// Gate type: simple AI prompt (headline only)
+// ─────────────────────────────────────────────
+function buildGatePrompt(type: string, niche: string, target_audience: string, language: string, ctx: string): string {
+  const gateDesc: Record<string, string> = {
+    age_gate: "verificação de idade (o usuário confirma ter 18+ anos antes de ser redirecionado)",
+    gender_gate: "seleção de gênero (botões Masculino / Feminino — ambos levam ao link de afiliado)",
+    country_gate: "seleção de país (grid de bandeiras — todas levam ao link de afiliado)",
+    captcha_gate: "verificação de segurança estilo CAPTCHA (o usuário clica 'Não sou robô' para continuar)",
+  };
+  return `Crie uma headline curta e persuasiva para uma presell do tipo "${gateDesc[type] ?? type}".
+Nicho: ${niche || "(não informado)"}
+Público-alvo: ${target_audience || "(não informado)"}
+Idioma: ${language || "pt-BR"}
+
+${ctx}
+
+Retorne APENAS este JSON (sem texto extra, sem markdown):
+{
+ "headline": "headline impactante de 6-10 palavras",
+ "subheadline": "frase complementar de 10-15 palavras",
+ "cta_text": "texto do botão de 3-6 palavras",
+ "cookie_notice": "texto explicando o redirecionamento de forma transparente (1 frase)"
+}`;
+}
+
+function buildCouponPrompt(niche: string, target_audience: string, language: string, ctx: string): string {
+  return `Crie conteúdo para uma presell de CUPOM DE DESCONTO no nicho "${niche || "(não informado)"}".
+Público-alvo: ${target_audience || "(não informado)"}
+Idioma: ${language || "pt-BR"}
+
+${ctx}
+
+Retorne APENAS este JSON (sem texto extra, sem markdown):
+{
+ "topbar": "barra superior",
+ "headline": "headline urgente destacando o desconto (8-12 palavras)",
+ "subheadline": "explica o desconto disponível (10-15 palavras)",
+ "coupon_code": "código ex: PROMO20 ou DESCONTO15 (criativo, relevante ao nicho)",
+ "discount_pct": "ex: 20% de desconto",
+ "countdown_minutes": 25,
+ "benefits": ["benefício 1","benefício 2","benefício 3","benefício 4","benefício 5"],
+ "cta_text": "texto do botão ex: Copiar cupom e acessar",
+ "cta_note": "nota curta sobre o redirecionamento"
+}`;
+}
+
+function buildCountdownPrompt(niche: string, target_audience: string, language: string, ctx: string): string {
+  return `Crie conteúdo URGENTE para uma presell com TIMER COUNTDOWN no nicho "${niche || "(não informado)"}".
+Público-alvo: ${target_audience || "(não informado)"}
+Idioma: ${language || "pt-BR"}
+
+${ctx}
+
+Regras: a headline DEVE criar urgência máxima. Benefits devem ser específicos e persuasivos.
+
+Retorne APENAS este JSON (sem texto extra, sem markdown):
+{
+ "topbar": "barra superior",
+ "headline": "headline de urgência extrema (8-12 palavras, mencione escassez ou prazo)",
+ "subheadline": "complementa urgência (10-15 palavras)",
+ "countdown_minutes": 15,
+ "urgency_message": "mensagem de urgência curta ex: ⏰ Oferta expira em breve!",
+ "benefits": ["benefício 1","benefício 2","benefício 3","benefício 4","benefício 5"],
+ "trust_badges": ["selo 1","selo 2","selo 3"],
+ "cta_text": "texto do botão urgente",
+ "cta_note": "nota curta"
+}`;
+}
+
 async function processBg(opts: {
-  admin: ReturnType<typeof createClient>; lovableKey: string; presellId: string;
+  admin: ReturnType<typeof createClient>; presellId: string;
   source_url: string; affiliate_url: string; presell_type: string;
   niche: string; target_audience: string; tone: string; language: string;
   extra_prompt: string; manual_info: string;
 }) {
-  const { admin, lovableKey, presellId, source_url, affiliate_url, presell_type,
+  const { admin, presellId, source_url, affiliate_url, presell_type,
     niche, target_audience, tone, language, extra_prompt, manual_info } = opts;
   try {
     const fetched = source_url ? await fetchSource(source_url) : { ok: false as const, reason: "Sem URL" };
     const info: Extracted | null = fetched.ok ? fetched.data : null;
     const fetchError = fetched.ok ? null : fetched.reason;
-
     const productImage = info?.og_image ?? "";
 
-    const ctx = `Tipo: ${presell_type}
-Nicho: ${niche}
-Público-alvo: ${target_audience}
-Tom: ${tone}
-Idioma: ${language || "pt-BR"}
-
-Página oficial: ${source_url || "(não informada)"}
+    const ctx = `Página oficial: ${source_url || "(não informada)"}
 ${info ? `Dados extraídos:
 - Título: ${info.title}
 - Descrição: ${info.description}
 - OG Title: ${info.og_title}
 - OG Description: ${info.og_description}
-- Canonical: ${info.canonical}
 - H1: ${info.h1}
 - H2s: ${info.h2.join(" | ")}
 - Preço visível: ${info.price}
-- Trecho da página: ${info.text.slice(0, 1500)}` : `Não foi possível ler a página oficial${fetchError ? ` (${fetchError})` : ""}.`}
-${manual_info ? `\nInformações fornecidas pelo usuário:\n${manual_info}` : ""}
-
+- Trecho: ${info.text.slice(0, 1000)}` : `Não foi possível ler a página${fetchError ? ` (${fetchError})` : ""}.`}
+${manual_info ? `\nInformações do usuário:\n${manual_info}` : ""}
 Comando extra: ${extra_prompt || "(nenhum)"}`;
 
-    const typeGuidance: Record<string, string> = {
-      review: "Escreva uma review detalhada e honesta. Use rating (0-5), destaque pros e cons reais, e inclua FAQs técnicas. Tom: equilibrado e confiável.",
-      advertorial: "Escreva como matéria editorial jornalística. Use a 'topbar' como nome de publicação. Tom: editorial, informativo, com subtítulo tipo byline.",
-      quiz: "Crie 3-5 perguntas com 4 opções cada que levem o leitor a descobrir que o produto é ideal para ele. Inclua resultado positivo no final.",
-      comparativo: "Faça uma tabela comparativa com 5-8 features reais vs alternativas. Destaque o produto como vencedor claro com justificativa.",
-      bridge: "Seja direto e minimalista. Foque nos 3-5 maiores benefícios e use cookie_notice explicando transparentemente o redirecionamento.",
-      vsl: "Escreva copy para um vídeo de vendas. Crie suspense na headline. O video_url pode estar vazio (usuário preencherá). Benefícios devem criar urgência.",
-      cookie_notice: "Seja ultra direto. Uma headline, o aviso de redirecionamento e o CTA. Nada mais.",
-      native_ad: "Escreva como artigo de conteúdo patrocinado. A 'topbar' deve dizer 'Conteúdo Patrocinado'. Tom jornalístico e educativo. A 'story' deve ser um artigo fluido, não copy de vendas.",
-      story: "Escreva uma narrativa pessoal de transformação em primeira pessoa. A 'story' deve ter pelo menos 300 palavras contando o problema, a descoberta do produto e a transformação. Use emoção autêntica.",
-      listicle: "Escreva no formato 'Top [N] razões por que...'. A 'benefits' deve ter itens numerados com títulos curtos e explanação de 2-3 linhas cada. Crie urgência e curiosidade.",
-    };
-    const guidance = typeGuidance[presell_type] ?? typeGuidance.review;
+    let raw: string;
+    let p: any;
 
-    const raw = await chatCompletion([
-      { role: "system", content:
-        "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, rico e persuasivo. Use parágrafos separados por \\n\\n nos campos de texto longo (intro, what_is, story, how_it_works). NUNCA copie literalmente textos da página oficial. O CTA SEMPRE depende de um clique real do usuário. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
-      { role: "user", content: `Crie uma presell profissional (tipo "${presell_type}") com base no contexto abaixo.
+    if (GATE_TYPES.includes(presell_type)) {
+      // Gate types: simple prompt
+      raw = await chatCompletion([
+        { role: "system", content: "Você é copywriter especializado em presells para afiliados. Responda APENAS com JSON válido, sem markdown, sem cercas de código, sem texto fora do JSON." },
+        { role: "user", content: buildGatePrompt(presell_type, niche, target_audience, language, ctx) },
+      ], 600);
+    } else if (presell_type === "coupon") {
+      raw = await chatCompletion([
+        { role: "system", content: "Você é copywriter especializado em presells para afiliados. Responda APENAS com JSON válido, sem markdown, sem cercas de código, sem texto fora do JSON." },
+        { role: "user", content: buildCouponPrompt(niche, target_audience, language, ctx) },
+      ], 1000);
+    } else if (presell_type === "countdown") {
+      raw = await chatCompletion([
+        { role: "system", content: "Você é copywriter especializado em presells para afiliados. Responda APENAS com JSON válido, sem markdown, sem cercas de código, sem texto fora do JSON." },
+        { role: "user", content: buildCountdownPrompt(niche, target_audience, language, ctx) },
+      ], 1000);
+    } else {
+      // Full content types (review, advertorial, quiz, etc.)
+      const typeGuidance: Record<string, string> = {
+        review: "Review detalhada e honesta. Use rating (0-5), pros e cons reais, FAQs técnicas. Tom: equilibrado e confiável.",
+        advertorial: "Matéria editorial jornalística. 'topbar' como nome de publicação. Tom: editorial, informativo.",
+        quiz: "3-5 perguntas com 4 opções cada que levem ao produto como solução. Resultado positivo no final.",
+        comparativo: "Tabela comparativa com 5-8 features reais vs alternativas. Produto como vencedor claro.",
+        bridge: "Direto e minimalista. 3-5 benefícios + cookie_notice transparente.",
+        vsl: "Copy para vídeo de vendas. Suspense na headline. video_url vazio (usuário preencherá).",
+        cookie_notice: "Ultra direto. Headline + aviso de redirecionamento + CTA. Nada mais.",
+        native_ad: "Artigo patrocinado. 'topbar' = 'Conteúdo Patrocinado'. Tom jornalístico. 'story' = artigo fluido.",
+        story: "Narrativa pessoal de transformação. 'story' = 300+ palavras contando problema, descoberta e transformação.",
+        listicle: "Formato 'Top [N] razões por que...'. 'benefits' numerados com título curto + 2-3 linhas cada.",
+      };
+      const guidance = typeGuidance[presell_type] ?? typeGuidance.review;
 
-INSTRUÇÕES ESPECÍFICAS PARA ESTE TIPO:
+      raw = await chatCompletion([
+        { role: "system", content: "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, rico e persuasivo. Use parágrafos separados por \\n\\n nos campos de texto longo. NUNCA copie literalmente textos da página oficial. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
+        { role: "user", content: `Crie uma presell profissional (tipo "${presell_type}") com base no contexto abaixo.
+
+INSTRUÇÕES ESPECÍFICAS:
 ${guidance}
 
-CONTEXTO DO PRODUTO:
+CONTEXTO:
+Nicho: ${niche}
+Público-alvo: ${target_audience}
+Tom: ${tone || "persuasivo"}
+Idioma: ${language || "pt-BR"}
 ${ctx}
 
 REGRAS DE QUALIDADE:
-- headline: impactante, específica, desperta curiosidade. Mínimo 8 palavras.
-- subheadline: complementa a headline, detalha o benefício. Mínimo 10 palavras.
-- intro: 2 parágrafos ricos separados por \\n\\n. Mínimo 80 palavras total.
-- what_is: 2-3 parágrafos separados por \\n\\n explicando o produto com detalhes. Mínimo 100 palavras.
-- story (quando aplicável): narrativa envolvente com 3-4 parágrafos separados por \\n\\n. Mínimo 150 palavras.
-- how_it_works: 2-3 parágrafos explicando o processo passo a passo. Mínimo 80 palavras.
-- benefits: mínimo 5 itens específicos e persuasivos (não genéricos).
-- pros: mínimo 3 pontos positivos reais.
-- cons: 1-2 pontos de atenção honestos (aumenta credibilidade).
-- faq: mínimo 4 perguntas com respostas detalhadas.
-- Dentro de strings use \\n para quebra de linha.
+- headline: mínimo 8 palavras, desperta curiosidade
+- subheadline: mínimo 10 palavras, detalha benefício
+- intro: 2 parágrafos ricos separados por \\n\\n (mínimo 80 palavras)
+- what_is: 2-3 parágrafos (mínimo 100 palavras)
+- story: narrativa com 3-4 parágrafos (mínimo 150 palavras)
+- benefits: mínimo 5 itens específicos
+- pros: mínimo 3 itens
+- cons: 1-2 itens honestos
+- faq: mínimo 4 pares q/a
+- Dentro de strings use \\n para quebra de linha (nunca newline literal)
 
-Retorne APENAS o JSON (sem texto antes ou depois):
+Retorne APENAS o JSON:
 {
  "topbar": string,
  "headline": string,
@@ -256,9 +389,11 @@ Retorne APENAS o JSON (sem texto antes ou depois):
  "cta_note": string,
  "faq": [{"q":string,"a":string}]
 }` },
-    ], 3000);
+      ], 3500);
+    }
+
     if (!raw) throw new Error("Resposta vazia da IA");
-    const p = JSON.parse(stripFences(raw));
+    p = safeJsonParse(raw);
 
     const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE);
     const title = p.headline || info?.og_title || info?.title || "Presell";
@@ -286,9 +421,13 @@ Deno.serve(async (req) => {
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY ausente" }, 500);
-    if (!lovableKey && !openaiKey) return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    // Aceita qualquer provedor de IA configurado
+    if (!lovableKey && !geminiKey && !openaiKey) {
+      return json({ error: "Configure GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    }
     const supabase = createClient(supabaseUrl, anon, { global: { headers: { Authorization: authHeader } } });
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: userData } = await supabase.auth.getUser();
@@ -313,7 +452,7 @@ Deno.serve(async (req) => {
     if (!VALID_TYPES.includes(presell_type)) presell_type = "review";
 
     const hostBase = source_url ? (() => { try { return new URL(source_url).hostname.replace(/^www\./, ""); } catch { return ""; } })() : "";
-    const base = slugify(`${hostBase || presell_type}-${presell_type}`);
+    const base = slugify(`${hostBase || niche || presell_type}-${presell_type}`);
     let slug = base, n = 0;
     while (true) {
       const { data: ex } = await admin.from("presells").select("id").eq("slug", slug).maybeSingle();
@@ -327,13 +466,13 @@ Deno.serve(async (req) => {
         headline: `Review Completo: ${niche || "Produto"} — Vale a Pena?`,
         subheadline: `Analisamos em detalhes para que você tome a melhor decisão`,
         rating: 4.7, rating_label: "Nota geral",
-        intro: `Nesta análise completa de ${niche || "este produto"}, vamos mostrar tudo que você precisa saber antes de decidir. Avaliamos funcionalidades, benefícios, pontos de atenção e para quem realmente vale a pena.\n\n[MODO MOCK — gerado sem IA para teste]`,
-        what_is: `${niche || "Este produto"} é uma solução desenvolvida para ${target_audience || "pessoas que querem resultados"} que buscam uma forma eficiente de alcançar seus objetivos.`,
-        for_whom: ["Iniciantes que querem começar do zero", "Quem já tentou outras soluções sem sucesso", "Pessoas que buscam resultados com menos esforço"],
-        benefits: ["Resultados comprovados em menos de 30 dias", "Suporte especializado 24/7", "Método passo a passo sem complicações", "Acesso vitalício às atualizações"],
-        pros: ["Fácil de usar mesmo para iniciantes", "Suporte rápido e eficiente", "Garantia de 30 dias sem burocracia"],
-        cons: ["Requer dedicação e consistência", "Resultados variam por pessoa"],
-        proof: ["Mais de 10.000 clientes satisfeitos", "Metodologia validada por especialistas"],
+        intro: `Nesta análise completa de ${niche || "este produto"}, vamos mostrar tudo que você precisa saber antes de decidir.\n\n[MODO MOCK — gerado sem IA para teste]`,
+        what_is: `${niche || "Este produto"} é uma solução desenvolvida para ${target_audience || "pessoas que querem resultados"}.`,
+        for_whom: ["Iniciantes que querem começar do zero", "Quem já tentou outras soluções", "Pessoas que buscam resultados"],
+        benefits: ["Resultados em menos de 30 dias", "Suporte 24/7", "Método passo a passo", "Acesso vitalício"],
+        pros: ["Fácil de usar", "Suporte rápido", "Garantia de 30 dias"],
+        cons: ["Requer dedicação", "Resultados variam"],
+        proof: ["Mais de 10.000 clientes", "Metodologia validada"],
         trust_badges: ["Compra 100% segura", "Garantia de 30 dias", "Suporte especializado"],
         faq: [
           { q: "Para quem é?", a: `Para ${target_audience || "qualquer pessoa"} que quer resultados reais.` },
@@ -342,6 +481,10 @@ Deno.serve(async (req) => {
         ],
         cta_text: "Acessar site oficial",
         cta_note: "Você será redirecionado para o site oficial do produto.",
+        coupon_code: "PROMO20",
+        discount_pct: "20% de desconto",
+        countdown_minutes: 15,
+        urgency_message: "⏰ Oferta por tempo limitado!",
       };
       const blocks = buildBlocks(mockP, presell_type, affiliate_url, "", DEFAULT_DISCLOSURE);
       const title = mockP.headline;
@@ -363,7 +506,7 @@ Deno.serve(async (req) => {
 
     // @ts-ignore EdgeRuntime
     EdgeRuntime.waitUntil(processBg({
-      admin, lovableKey: lovableKey ?? "", presellId: created.id,
+      admin, presellId: created.id,
       source_url, affiliate_url, presell_type, niche, target_audience, tone, language,
       extra_prompt, manual_info,
     }));
