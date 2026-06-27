@@ -681,7 +681,7 @@ ${b.winner ? `<p class="winner"><strong>Recomendado:</strong> ${esc(b.winner)}</
         break;
       }
       case "cookie_notice":
-        if (b.text) sec.push(section(`<div class="notice">${esc(b.text)}</div>`));
+        // Cookie notice is rendered as an overlay popup (see below), skip inline section
         break;
       case "faq":
         if (b.items?.length) sec.push(section(
@@ -699,6 +699,29 @@ ${b.winner ? `<p class="winner"><strong>Recomendado:</strong> ${esc(b.winner)}</
 
   const stickyCta = d.cta?.sticky !== false
     ? `<div class="sticky-cta"><a class="cta cta-sticky" data-cta="1" href="${esc(aff)}" target="_blank" rel="sponsored noopener noreferrer">${esc(d.cta?.text || "Acessar site oficial")}</a></div>`
+    : "";
+
+  // Cookie notice: rendered as overlay popup (appears on page load)
+  const cookieNotice = d.cookie_notice;
+  const cookieOverlay = cookieNotice?.visible && cookieNotice?.text
+    ? `<div id="ckOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:22px;padding:clamp(24px,4vw,36px);max-width:460px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.3);animation:ckIn .25s ease">
+    <div style="font-size:38px;margin-bottom:14px">🍪</div>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:700;color:#0f172a;margin-bottom:10px;line-height:1.3">Aviso de redirecionamento</h3>
+    <p style="color:#64748b;font-size:14px;line-height:1.7;margin-bottom:22px">${esc(cookieNotice.text)}</p>
+    <a href="${esc(aff)}" target="_blank" rel="sponsored noopener noreferrer" data-cta="1"
+       style="display:block;background:linear-gradient(135deg,${theme.primary},${theme.accent});color:#fff;font-weight:700;font-size:16px;padding:16px 24px;border-radius:12px;text-decoration:none;margin-bottom:10px;box-shadow:0 8px 24px rgba(99,102,241,.3)">
+      ✓ Entendi, continuar →
+    </a>
+    <button onclick="document.getElementById('ckOverlay').style.display='none'"
+       style="background:none;border:1px solid #e2e8f0;color:#64748b;padding:10px 20px;border-radius:10px;cursor:pointer;font-size:14px;width:100%;transition:background .15s"
+       onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
+      Não, voltar
+    </button>
+    <p style="color:#94a3b8;font-size:11px;margin-top:14px;line-height:1.6">Esta página pode conter links de afiliado.</p>
+  </div>
+</div>
+<style>@keyframes ckIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}</style>`
     : "";
 
   return `<!DOCTYPE html>
@@ -780,5 +803,6 @@ ${sec.join("\n")}
 <p>© ${new Date().getFullYear()}. Conteúdo independente.</p>
 </footer>
 ${stickyCta}
+${cookieOverlay}
 </body></html>`;
 }

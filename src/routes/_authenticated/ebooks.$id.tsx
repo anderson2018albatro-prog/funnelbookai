@@ -11,10 +11,11 @@ import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, Fi
 import { jsPDF } from "jspdf";
 
 function chapterImageUrl(title: string): string {
+  // Use LoremFlickr — free, CORS enabled, topic-relevant images
   const kw = encodeURIComponent(
-    title.replace(/[^\w\sÀ-ÿ]/g, " ").trim().split(/\s+/).slice(0, 4).join(",")
+    title.replace(/[^\w\sÀ-ÿ]/g, " ").trim().split(/\s+/).slice(0, 3).join(",")
   );
-  return `https://source.unsplash.com/1200x400/?${kw}`;
+  return `https://loremflickr.com/1200/380/${kw}?lock=${Math.abs(title.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 1000}`;
 }
 
 async function imgToDataUrl(url: string): Promise<string | null> {

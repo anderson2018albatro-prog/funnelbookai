@@ -97,7 +97,35 @@ type Extracted = {
   og_title: string; og_description: string; og_image: string;
   canonical: string; h1: string; h2: string[];
   price: string; text: string;
+  theme_color: string; brand_color: string;
 };
+
+// Tenta extrair a cor primária/brand do site: theme-color, botões, links primários
+function extractBrandColor(html: string): string {
+  // theme-color meta (mais confiável)
+  const tc = (html.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? "")
+    || (html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']theme-color["']/i)?.[1] ?? "");
+  if (tc && /^#[0-9a-f]{3,6}$/i.test(tc)) return tc;
+  // CSS custom property --primary ou --brand
+  const varMatch = html.match(/--(?:primary|brand|color-primary|main-color)\s*:\s*(#[0-9a-f]{3,6})/i);
+  if (varMatch) return varMatch[1];
+  // Cor mais frequente em backgrounds de botões
+  const bgColors = [...html.matchAll(/background(?:-color)?\s*:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1].toLowerCase());
+  if (bgColors.length) {
+    const freq: Record<string, number> = {};
+    for (const c of bgColors) { freq[c] = (freq[c] ?? 0) + 1; }
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (top && top !== "#ffffff" && top !== "#000000" && top !== "#f9f9f9" && top !== "#eeeeee") return top;
+  }
+  return "";
+}
+
+// Gera uma cor de acento levemente mais clara/saturada a partir da cor primária
+function deriveAccent(hex: string): string {
+  if (!hex || !/^#[0-9a-f]{3,6}$/i.test(hex)) return "#06b6d4";
+  // simples: shift hue +30 graus (approx via lighten)
+  return hex; // retorna a mesma por enquanto — o CSS aplica opacidade
+}
 
 function extractMeta(html: string, base: string): Extracted {
   const pick = (re: RegExp) => (html.match(re)?.[1] ?? "").trim();
@@ -119,7 +147,9 @@ function extractMeta(html: string, base: string): Extracted {
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ").trim().slice(0, 4000);
-  return { title, description, og_title, og_description, og_image, canonical, h1, h2, price, text };
+  const brand_color = extractBrandColor(html);
+  const theme_color = brand_color;
+  return { title, description, og_title, og_description, og_image, canonical, h1, h2, price, text, theme_color, brand_color };
 }
 
 async function fetchSource(url: string): Promise<{ ok: true; data: Extracted } | { ok: false; reason: string }> {
@@ -141,12 +171,15 @@ async function fetchSource(url: string): Promise<{ ok: true; data: Extracted } |
   } catch (e) { return { ok: false, reason: (e as Error).message }; }
 }
 
-function buildBlocks(p: any, type: string, affUrl: string, productImage: string, disclosure: string) {
+function buildBlocks(p: any, type: string, affUrl: string, productImage: string, disclosure: string, siteTheme?: { primary: string; accent: string }) {
+  const theme = siteTheme
+    ? { primary: siteTheme.primary, accent: siteTheme.accent, bg: "#ffffff", text: "#0f172a" }
+    : { ...DEFAULT_THEME };
   return {
     type, affiliate_url: affUrl,
     order: defaultOrderFor(type),
     disclosure_text: disclosure,
-    theme: { ...DEFAULT_THEME },
+    theme,
     data: {
       topbar: { visible: true, text: p.topbar || "Análise independente" },
       headline: { visible: true, title: p.headline ?? "", subtitle: p.subheadline ?? "" },
@@ -395,7 +428,12 @@ Retorne APENAS o JSON:
     if (!raw) throw new Error("Resposta vazia da IA");
     p = safeJsonParse(raw);
 
-    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE);
+    // Usa cores do site oficial se extraídas
+    const siteTheme = info?.brand_color
+      ? { primary: info.brand_color, accent: info.brand_color }
+      : undefined;
+
+    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE, siteTheme);
     const title = p.headline || info?.og_title || info?.title || "Presell";
 
     const { error } = await admin.from("presells").update({

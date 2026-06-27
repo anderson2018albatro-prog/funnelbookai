@@ -26,6 +26,21 @@ function stripFences(s: string) {
   if (f >= 0 && l > f) c = c.slice(f, l + 1);
   return c;
 }
+function repairJson(s: string): string {
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  let inStr = false, escaped = false, out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escaped) { out += c; escaped = false; continue; }
+    if (c === "\\") { out += c; escaped = true; continue; }
+    if (c === '"') { out += c; inStr = !inStr; continue; }
+    if (inStr && c === "\n") { out += "\\n"; continue; }
+    if (inStr && c === "\r") { out += "\\r"; continue; }
+    if (inStr && c === "\t") { out += "\\t"; continue; }
+    out += c;
+  }
+  return out;
+}
 
 function buildBlocks(sp: any, fallbackTitle: string) {
   const testimonials = [
@@ -217,7 +232,7 @@ Retorne APENAS JSON válido (sem texto fora, sem cercas de código):
       { role: "user", content: prompt },
     ], 2500);
     if (!raw) throw new Error("Resposta vazia da IA");
-    const sp = JSON.parse(stripFences(raw));
+    const sp = JSON.parse(repairJson(stripFences(raw)));
     sp.button_url = sp.button_url || form.button_url || "#";
     const title = sp.headline ?? form.product_name ?? "Página de Vendas";
     const html = buildHtml(sp, title, sp.button_url);
@@ -256,8 +271,9 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const testMode = body.test_mode === true;
 
-    if (!testMode && !lovableKey && !openaiKey) {
-      return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!testMode && !lovableKey && !geminiKey && !openaiKey) {
+      return json({ error: "Configure GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
     }
 
     const form = {
