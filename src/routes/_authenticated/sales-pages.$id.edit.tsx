@@ -38,21 +38,35 @@ function EditPage() {
       if (error) throw error;
       return data;
     },
+    refetchInterval: (q) => ((q.state.data as any)?.status === "processing" ? 3000 : false),
   });
 
   useEffect(() => {
     if (!pageQ.data) return;
+    const status = (pageQ.data as any).status as string;
     const b = (pageQ.data as any).blocks as SalesBlocks | null;
     if (b && b.data) {
       setBlocks(b);
-    } else {
-      // Fallback: builds an empty skeleton
+    } else if (status !== "processing") {
       setBlocks(buildBlocksFromAI({}, pageQ.data.title));
     }
-  }, [pageQ.data?.id]);
+  }, [pageQ.data?.id, (pageQ.data as any)?.status]);
 
-  if (pageQ.isLoading || !blocks)
+  const isProcessing = (pageQ.data as any)?.status === "processing";
+
+  if (pageQ.isLoading || (!blocks && !isProcessing))
     return (<DashboardShell title="Editor"><div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></DashboardShell>);
+
+  if (isProcessing && !blocks)
+    return (
+      <DashboardShell title="Editor — Gerando…">
+        <div className="mx-auto max-w-2xl p-8 text-center space-y-3">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <div className="font-medium">A IA está gerando sua página de vendas…</div>
+          <div className="text-sm text-muted-foreground">Isso leva 30–60 segundos. Esta tela atualiza automaticamente.</div>
+        </div>
+      </DashboardShell>
+    );
 
   const page = pageQ.data!;
 
@@ -137,7 +151,7 @@ function EditPage() {
     } catch (e: any) { toast.error(e.message); } finally { setAiBusy(false); }
   }
 
-  const previewHtml = renderBlocksToHtml(blocks, page.title);
+  const previewHtml = blocks ? renderBlocksToHtml(blocks, page.title) : "";
 
   return (
     <DashboardShell title={`Editor — ${page.title}`}>
@@ -161,11 +175,23 @@ function EditPage() {
           </Button>
         </div>
 
+        {isProcessing && (
+          <div className="mb-3 rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+            Gerando conteúdo com IA… A página atualiza automaticamente quando terminar.
+          </div>
+        )}
+        {(page as any).status === "failed" && (
+          <div className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            Falha na geração: {(page as any).error_message}
+          </div>
+        )}
+
         <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
           {/* Editor */}
           <div className="space-y-3">
-            {blocks.order.map((key) => {
-              const b: any = (blocks.data as any)[key];
+            {blocks!.order.map((key) => {
+              const b: any = (blocks!.data as any)[key];
               return (
                 <div key={key} className={`rounded-2xl border bg-card p-4 ${b.visible ? "border-border" : "border-dashed border-muted opacity-60"}`}>
                   <div className="mb-3 flex items-center gap-2">

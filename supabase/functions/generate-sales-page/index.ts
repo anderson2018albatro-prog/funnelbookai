@@ -40,6 +40,22 @@ function stripFences(s: string) {
   return c;
 }
 
+function repairJson(s: string): string {
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  let inStr = false, escaped = false, out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escaped) { out += c; escaped = false; continue; }
+    if (c === "\\") { out += c; escaped = true; continue; }
+    if (c === '"') { out += c; inStr = !inStr; continue; }
+    if (inStr && c === "\n") { out += "\\n"; continue; }
+    if (inStr && c === "\r") { out += "\\r"; continue; }
+    if (inStr && c === "\t") { out += "\\t"; continue; }
+    out += c;
+  }
+  return out;
+}
+
 function buildBlocks(sp: any, fallbackTitle: string) {
   // Depoimentos placeholder claramente marcados — nunca apresentados como reais
   const testimonials = [
@@ -215,7 +231,7 @@ Retorne APENAS JSON válido (sem texto fora do JSON, sem cercas de código):
       { role: "user", content: prompt },
     ], 2500);
     if (!raw) throw new Error("Resposta vazia da IA");
-    const sp = JSON.parse(stripFences(raw));
+    const sp = JSON.parse(repairJson(stripFences(raw)));
     const title = sp.headline ?? ebook.title;
     const html = buildHtml(sp, title);
     const blocks = buildBlocks(sp, title);
@@ -245,8 +261,11 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY não configurada" }, 500);
-    if (!lovableKey && !openaiKey) return json({ error: "Configure LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    if (!lovableKey && !geminiKey && !openaiKey) {
+      return json({ error: "Configure GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    }
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
