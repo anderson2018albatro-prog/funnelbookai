@@ -38,6 +38,11 @@ function NewEbook() {
       if (!form.tema || !form.publico_alvo) throw new Error("Preencha tema e público-alvo.");
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) throw new Error("Sessão expirada. Faça login novamente.");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: cr } = await supabase.from("user_credits").select("credits").eq("user_id", user.id).maybeSingle();
+        if (!cr || (cr.credits ?? 0) <= 0) throw new Error("Créditos insuficientes. Acesse seu perfil para recarregar.");
+      }
       const payload = {
         ...form,
         paginas: effectivePages,

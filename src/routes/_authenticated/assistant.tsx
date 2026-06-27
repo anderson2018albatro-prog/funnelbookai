@@ -94,7 +94,8 @@ function AssistantPage() {
   }
 
   async function resetConversation(goal?: string) {
-    await supabase.from("assistant_conversations").delete().neq("user_id", "00000000-0000-0000-0000-000000000000");
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await supabase.from("assistant_conversations").delete().eq("user_id", user.id);
     setSelectedGoal(goal ?? null);
     qc.setQueryData(["assistant-conversation"], { messages: [INTRO], briefing: null });
     if (goal) {

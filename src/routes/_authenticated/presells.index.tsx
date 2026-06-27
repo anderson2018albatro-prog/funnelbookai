@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Loader2, MousePointerClick, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, ExternalLink, Loader2, MousePointerClick, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PRESELL_TYPE_LABELS } from "@/lib/presell-blocks";
 
@@ -28,6 +28,12 @@ function PresellsList() {
     if (!confirm("Excluir esta presell?")) return;
     const { error } = await supabase.from("presells").delete().eq("id", id);
     if (error) toast.error(error.message); else { toast.success("Excluída"); q.refetch(); }
+  }
+
+  async function togglePublish(id: string, current: boolean) {
+    const { error } = await supabase.from("presells").update({ is_published: !current }).eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success(current ? "Despublicada" : "Publicada!"); q.refetch(); }
   }
 
   return (
@@ -74,9 +80,18 @@ function PresellsList() {
                     )}
                   </div>
                 </div>
-                <a href={`/pre/${p.slug}`} target="_blank" rel="noopener">
-                  <Button size="sm" variant="ghost" title="Ver presell pública"><ExternalLink className="h-4 w-4" /></Button>
-                </a>
+                <Button size="sm" variant={p.is_published ? "secondary" : "outline"}
+                  onClick={() => togglePublish(p.id, p.is_published)}
+                  disabled={p.status !== "completed"}
+                  title={p.is_published ? "Despublicar" : "Publicar"}>
+                  {p.is_published ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+                  {p.is_published ? "Despublicar" : "Publicar"}
+                </Button>
+                {p.is_published && (
+                  <a href={`/pre/${p.slug}`} target="_blank" rel="noopener">
+                    <Button size="sm" variant="ghost" title="Ver pública"><ExternalLink className="h-4 w-4" /></Button>
+                  </a>
+                )}
                 <Link to="/presells/$id/edit" params={{ id: p.id }}>
                   <Button size="sm" variant="ghost"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
                 </Link>
