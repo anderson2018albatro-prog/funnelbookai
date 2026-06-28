@@ -171,7 +171,7 @@ function mockSalesData(form: any): any {
     oferta: form.offer || "Acesso completo por apenas 12x de R$ 19,70",
     price: form.offer ? "" : "R$ 197",
     bonus: ["Bônus 1: Guia rápido de implementação (valor R$ 47)", "Bônus 2: Planilha de acompanhamento (valor R$ 27)"],
-    garantia: "Garantia de 30 dias: se não gostar, devolvemos 100% do seu dinheiro",
+    garantia: form.garantia || "Garantia de 30 dias: se não gostar, devolvemos 100% do seu dinheiro",
     faq: [
       { pergunta: "Para quem é esse produto?", resposta: `Para ${form.target_audience || "qualquer pessoa"} que quer resultados reais.` },
       { pergunta: "Como acesso após a compra?", resposta: "Você recebe o acesso por e-mail em até 5 minutos após a confirmação." },
@@ -196,7 +196,10 @@ BRIEFING DO PRODUTO:
 - Nicho: ${form.niche || "(não informado)"}
 - Público-alvo: ${form.target_audience || "(não informado)"}
 - Promessa principal: ${form.promessa || "(não informada)"}
+- Dor do cliente: ${form.dor_principal || "(não informada)"}
+- Resultado esperado: ${form.resultado_esperado || "(não informado)"}
 - Oferta/Preço: ${form.offer || "(não informada)"}
+- Garantia: ${form.garantia || "(não informada)"}
 - Link do botão: ${form.button_url || ""}
 - Instruções extras: ${form.prompt || "nenhuma"}
 
@@ -282,7 +285,10 @@ Deno.serve(async (req) => {
       niche: String(body.niche ?? ""),
       target_audience: String(body.target_audience ?? ""),
       promessa: String(body.promessa ?? ""),
+      dor_principal: String(body.dor_principal ?? ""),
+      resultado_esperado: String(body.resultado_esperado ?? ""),
       offer: String(body.offer ?? ""),
+      garantia: String(body.garantia ?? ""),
       button_url: String(body.button_url ?? ""),
       language: String(body.language ?? "pt-BR"),
       tone: String(body.tone ?? "persuasivo"),

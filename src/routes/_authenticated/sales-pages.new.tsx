@@ -51,16 +51,8 @@ function NewSalesPage() {
     }
     setBusy(true);
     try {
-      const fullPrompt = [
-        form.prompt,
-        form.dor_principal ? `Dor principal do cliente: ${form.dor_principal}` : "",
-        form.resultado_esperado ? `Resultado esperado: ${form.resultado_esperado}` : "",
-        form.garantia ? `Garantia: ${form.garantia}` : "",
-        form.price ? `Preço: ${form.price}` : "",
-      ].filter(Boolean).join("\n");
-
       const { data, error } = await supabase.functions.invoke("generate-sales-page-from-prompt", {
-        body: { ...form, prompt: fullPrompt },
+        body: form,
       });
       if (error) {
         let msg = error.message;
