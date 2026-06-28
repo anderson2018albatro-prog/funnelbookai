@@ -78,8 +78,9 @@ function NewPresell() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     source_url: "", affiliate_url: "", presell_type: "review",
-    niche: "", target_audience: "", tone: "persuasivo", language: "pt-BR",
+    niche: "", target_audience: "", tone: "persuasivo", language: "auto",
     extra_prompt: "", manual_info: "",
+    whatsapp_phone: "", whatsapp_message: "",
   });
   const [busy, setBusy] = useState(false);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -88,7 +89,12 @@ function NewPresell() {
     if (!form.affiliate_url) { toast.error("Informe o link de afiliado"); return; }
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-presell", { body: form });
+      const { data, error } = await supabase.functions.invoke("generate-presell", {
+        body: {
+          ...form,
+          whatsapp_phone: form.whatsapp_phone.replace(/\D/g, ""),
+        },
+      });
       if (error) {
         let msg = error.message;
         try { const ctx: any = (error as any).context; if (ctx?.json) { const b = await ctx.json(); if (b?.error) msg = b.error; } } catch { /* noop */ }
@@ -196,6 +202,7 @@ function NewPresell() {
               <Label>Idioma</Label>
               <select className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
                 value={form.language} onChange={(e) => set("language", e.target.value)}>
+                <option value="auto">🌐 Auto (detectar da página)</option>
                 <option value="pt-BR">🇧🇷 Português (Brasil)</option>
                 <option value="pt-PT">🇵🇹 Português (Portugal)</option>
                 <option value="en">🇺🇸 Inglês</option>
@@ -229,6 +236,26 @@ function NewPresell() {
               </div>
             </>
           )}
+
+          {/* WhatsApp button optional */}
+          <div className="rounded-xl border border-border bg-surface p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-base">💬</span>
+              <span className="text-sm font-semibold">Botão WhatsApp flutuante <span className="text-muted-foreground font-normal">(opcional)</span></span>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div>
+                <Label className="text-xs">Número (com DDI, só dígitos)</Label>
+                <Input value={form.whatsapp_phone} onChange={(e) => set("whatsapp_phone", e.target.value)}
+                  placeholder="5511999999999" />
+              </div>
+              <div>
+                <Label className="text-xs">Mensagem pré-preenchida</Label>
+                <Input value={form.whatsapp_message} onChange={(e) => set("whatsapp_message", e.target.value)}
+                  placeholder="Olá! Tenho interesse neste produto." />
+              </div>
+            </div>
+          </div>
 
           <Button onClick={submit} disabled={busy} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}

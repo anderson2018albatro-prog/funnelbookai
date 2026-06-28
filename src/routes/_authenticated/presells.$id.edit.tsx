@@ -48,6 +48,12 @@ function EditPresell() {
     // Backfill new optional fields if missing (older records).
     if (!initial.theme) initial.theme = { ...DEFAULT_THEME };
     if (!initial.disclosure_text) initial.disclosure_text = row.disclosure_text || DEFAULT_DISCLOSURE;
+    if (!initial.data.whatsapp_button) {
+      (initial.data as any).whatsapp_button = { visible: false, phone: "", message: "Olá! Tenho interesse neste produto.", color: "#25d366" };
+    }
+    if (!(initial.order as string[]).includes("whatsapp_button")) {
+      (initial.order as string[]).push("whatsapp_button");
+    }
     setBlocks(initial);
     setAffUrl(row.affiliate_url || "");
     setDisclosure(initial.disclosure_text || DEFAULT_DISCLOSURE);
@@ -408,6 +414,27 @@ function BlockEditor({ blockKey, block, update, uploadImage }: {
             Botão flutuante no mobile
           </label>
           <p className="text-xs text-muted-foreground">O link de afiliado é configurado no topo. Todo CTA abre em nova aba com rel="sponsored noopener noreferrer".</p>
+        </div>
+      );
+    case "whatsapp_button":
+      return (
+        <div className="space-y-2">
+          <div>
+            <Label className="text-xs">Número (DDI + número, só dígitos)</Label>
+            <Input value={block.phone ?? ""} onChange={(e) => update({ phone: e.target.value.replace(/\D/g, ""), visible: !!e.target.value })} placeholder="5511999999999" />
+          </div>
+          <div>
+            <Label className="text-xs">Mensagem pré-preenchida</Label>
+            <Input value={block.message ?? ""} onChange={(e) => update({ message: e.target.value })} placeholder="Olá! Tenho interesse neste produto." />
+          </div>
+          <div>
+            <Label className="text-xs">Cor do botão</Label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={block.color ?? "#25d366"} onChange={(e) => update({ color: e.target.value })} className="h-9 w-12 cursor-pointer rounded border border-border" />
+              <Input value={block.color ?? "#25d366"} onChange={(e) => update({ color: e.target.value })} className="font-mono text-xs" />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Deixe o número vazio para ocultar o botão.</p>
         </div>
       );
   }

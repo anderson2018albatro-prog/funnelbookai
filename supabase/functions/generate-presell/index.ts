@@ -92,12 +92,35 @@ function defaultOrderFor(type: string): string[] {
   }
 }
 
+// Maps HTML lang attribute to our language codes
+function detectLangFromHtml(html: string): string {
+  const m = html.match(/<html[^>]+lang=["']([^"']+)["']/i);
+  if (!m) return "";
+  const raw = m[1].toLowerCase().trim();
+  if (raw.startsWith("pt")) return "pt-BR";
+  if (raw.startsWith("en")) return "en";
+  if (raw.startsWith("es")) return "es";
+  if (raw.startsWith("fr")) return "fr";
+  if (raw.startsWith("de")) return "de";
+  if (raw.startsWith("it")) return "it";
+  if (raw.startsWith("ja")) return "ja";
+  if (raw.startsWith("zh")) return "zh";
+  if (raw.startsWith("ru")) return "ru";
+  if (raw.startsWith("ar")) return "ar";
+  if (raw.startsWith("hi")) return "hi";
+  if (raw.startsWith("nl")) return "nl";
+  if (raw.startsWith("pl")) return "pl";
+  if (raw.startsWith("tr")) return "tr";
+  return "";
+}
+
 type Extracted = {
   title: string; description: string;
   og_title: string; og_description: string; og_image: string;
   canonical: string; h1: string; h2: string[];
   price: string; text: string;
   theme_color: string; brand_color: string;
+  detected_lang: string;
 };
 
 // Tenta extrair a cor primária/brand do site: theme-color, botões, links primários
@@ -149,7 +172,8 @@ function extractMeta(html: string, base: string): Extracted {
     .replace(/\s+/g, " ").trim().slice(0, 4000);
   const brand_color = extractBrandColor(html);
   const theme_color = brand_color;
-  return { title, description, og_title, og_description, og_image, canonical, h1, h2, price, text, theme_color, brand_color };
+  const detected_lang = detectLangFromHtml(html);
+  return { title, description, og_title, og_description, og_image, canonical, h1, h2, price, text, theme_color, brand_color, detected_lang };
 }
 
 async function fetchSource(url: string): Promise<{ ok: true; data: Extracted } | { ok: false; reason: string }> {
@@ -171,7 +195,7 @@ async function fetchSource(url: string): Promise<{ ok: true; data: Extracted } |
   } catch (e) { return { ok: false, reason: (e as Error).message }; }
 }
 
-function buildBlocks(p: any, type: string, affUrl: string, productImage: string, disclosure: string, siteTheme?: { primary: string; accent: string }) {
+function buildBlocks(p: any, type: string, affUrl: string, productImage: string, disclosure: string, siteTheme?: { primary: string; accent: string }, waPhone = "", waMessage = "") {
   const theme = siteTheme
     ? { primary: siteTheme.primary, accent: siteTheme.accent, bg: "#ffffff", text: "#0f172a" }
     : { ...DEFAULT_THEME };
@@ -232,6 +256,12 @@ function buildBlocks(p: any, type: string, affUrl: string, productImage: string,
         code: p.coupon_code ?? "PROMO10",
         discount_pct: p.discount_pct ?? "10% de desconto",
         expires_minutes: typeof p.countdown_minutes === "number" ? p.countdown_minutes : 20,
+      },
+      whatsapp_button: {
+        visible: !!waPhone,
+        phone: waPhone,
+        message: waMessage || "Olá! Tenho interesse neste produto.",
+        color: "#25d366",
       },
     },
   };
@@ -312,14 +342,23 @@ async function processBg(opts: {
   source_url: string; affiliate_url: string; presell_type: string;
   niche: string; target_audience: string; tone: string; language: string;
   extra_prompt: string; manual_info: string;
+  whatsapp_phone: string; whatsapp_message: string;
 }) {
   const { admin, presellId, source_url, affiliate_url, presell_type,
-    niche, target_audience, tone, language, extra_prompt, manual_info } = opts;
+    niche, target_audience, tone, extra_prompt, manual_info,
+    whatsapp_phone, whatsapp_message } = opts;
+  let language = opts.language;
   try {
     const fetched = source_url ? await fetchSource(source_url) : { ok: false as const, reason: "Sem URL" };
     const info: Extracted | null = fetched.ok ? fetched.data : null;
     const fetchError = fetched.ok ? null : fetched.reason;
     const productImage = info?.og_image ?? "";
+    // Auto-detect language from producer page when user selected "auto"
+    if (language === "auto" && info?.detected_lang) {
+      language = info.detected_lang;
+    } else if (language === "auto") {
+      language = "pt-BR"; // fallback
+    }
 
     const ctx = `Página oficial: ${source_url || "(não informada)"}
 ${info ? `Dados extraídos:
@@ -433,7 +472,7 @@ Retorne APENAS o JSON:
       ? { primary: info.brand_color, accent: info.brand_color }
       : undefined;
 
-    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE, siteTheme);
+    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE, siteTheme, whatsapp_phone, whatsapp_message);
     const title = p.headline || info?.og_title || info?.title || "Presell";
 
     const { error } = await admin.from("presells").update({
@@ -475,8 +514,10 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const testMode = body.test_mode === true;
     let { source_url = "", affiliate_url = "", presell_type = "review",
-      niche = "", target_audience = "", tone = "", language = "pt-BR",
+      niche = "", target_audience = "", tone = "", language = "auto",
       extra_prompt = "", manual_info = "" } = body;
+    const whatsapp_phone = String(body.whatsapp_phone ?? "").replace(/\D/g, "");
+    const whatsapp_message = String(body.whatsapp_message ?? "");
 
     if (testMode) {
       affiliate_url = String(affiliate_url || "https://exemplo.com/afiliado").trim();
@@ -546,7 +587,7 @@ Deno.serve(async (req) => {
     EdgeRuntime.waitUntil(processBg({
       admin, presellId: created.id,
       source_url, affiliate_url, presell_type, niche, target_audience, tone, language,
-      extra_prompt, manual_info,
+      extra_prompt, manual_info, whatsapp_phone, whatsapp_message,
     }));
 
     return json({ presellId: created.id, slug, status: "processing" }, 202);
