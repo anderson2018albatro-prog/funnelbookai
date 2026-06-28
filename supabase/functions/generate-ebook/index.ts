@@ -4,6 +4,7 @@
 // O frontend faz polling em ebooks.status.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { chatCompletion } from "../_shared/ai.ts";
+import { jsonrepair } from "https://esm.sh/jsonrepair@3.6.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,9 +82,11 @@ function sanitizeLlmJson(s: string): string {
 
 function parseLoose(raw: string): any {
   const cleaned = stripFences(raw);
-  try { return JSON.parse(cleaned); } catch (_) { /* fallthrough */ }
-  try { return JSON.parse(sanitizeLlmJson(cleaned)); } catch (e) {
-    throw new Error(`JSON inválido da IA: ${(e as Error).message}. Prévia: ${cleaned.slice(0, 200)}`);
+  try { return JSON.parse(cleaned); } catch (_) { /* continua */ }
+  try { return JSON.parse(sanitizeLlmJson(cleaned)); } catch (_) { /* continua */ }
+  try { return JSON.parse(jsonrepair(cleaned)); } catch (_) { /* continua */ }
+  try { return JSON.parse(jsonrepair(sanitizeLlmJson(cleaned))); } catch (e) {
+    throw new Error(`JSON inválido da IA após reparos: ${(e as Error).message}. Prévia: ${cleaned.slice(0, 200)}`);
   }
 }
 
@@ -91,7 +94,7 @@ async function callAI(_lovableKey: string, prompt: string) {
   const content = await chatCompletion([
     { role: "system", content: "Você é um escritor profissional de ebooks. REGRA ABSOLUTA: responda APENAS com um objeto JSON válido. Nenhum texto antes, nenhum texto depois, nenhuma cerca de código (```). Dentro de strings JSON use \\n para quebrar linhas, nunca quebre linhas literais dentro de strings." },
     { role: "user", content: prompt },
-  ], 6000);
+  ], 8000);
   if (!content) throw new Error("Resposta vazia da IA");
   return parseLoose(content);
 }
@@ -124,8 +127,8 @@ async function processInBackground(opts: {
 }) {
   const { admin, lovableKey, ebookId, userId, briefing } = opts;
   try {
-    // 5 capítulos máx para o budget de tokens (6000 tokens de saída ≈ 75s no gpt-4o-mini)
-    const chapters = Math.min(5, Math.max(3, Number(briefing.capitulos) || 5));
+    // 4 capítulos máx para o budget de tokens (8000 tokens de saída ≈ 75s no gpt-4o-mini)
+    const chapters = Math.min(4, Math.max(3, Number(briefing.capitulos) || 4));
 
     const prompt = `Crie um ebook PROFISSIONAL E COMPLETO no idioma "${briefing.idioma || "Português"}", com tom "${briefing.tom_voz || "profissional e acessível"}".
 
