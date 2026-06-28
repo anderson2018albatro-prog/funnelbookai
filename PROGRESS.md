@@ -1,88 +1,82 @@
 # PROGRESS — FunnelBook AI (branch: terminar-saas-claude)
 
-## O que foi feito nesta sessão
+## Sessão 2 (2026-06-27) — Presell completo
 
-### Correções críticas (bugs que impediam geração)
-- **generate-ebook**: Adicionado check `geminiKey` na linha 215 — sem isso, geração falhava quando só GEMINI_API_KEY estava configurada. Deploy feito.
-- **generate-sales-page**: Mesmo bug do Gemini key. Adicionado `repairJson()` que previne "JSON inválido" da IA. Fix local (não deployado).
-- **generate-sales-page-from-prompt**: Já tinha sido corrigido anteriormente.
-- **generate-presell**: Já tinha sido corrigido anteriormente.
+### O que foi entregue
 
-### Editor de página de vendas (sales-pages.$id.edit.tsx)
-- Adicionado `refetchInterval: 3000` enquanto status === "processing" (editor ficava vazio para sempre quando a IA ainda estava gerando)
-- Corrigido `useEffect` — dependência era só `[pageQ.data?.id]`, agora inclui `status` para atualizar blocos quando IA termina
-- Adicionado banner "Gerando com IA..." enquanto processa
-- Adicionado banner de erro quando status === "failed"
+#### Detecção automática de idioma
+- `generate-presell/index.ts`: função `detectLangFromHtml()` extrai `<html lang="...">` da página do produtor
+- 14 idiomas mapeados: pt-BR, pt-PT, en, es, fr, de, it, ja, zh, ru, ar, hi, nl, pl, tr
+- Select de idioma: primeira opção agora é "Auto (detectar da página)"
+- Default mudou de `"pt-BR"` para `"auto"` — fallback para pt-BR quando não detecta
 
-### Build
-- Build passa limpo: `npm run build` ✅
+#### Botão WhatsApp flutuante
+- `generate-presell/index.ts`: aceita `whatsapp_phone` + `whatsapp_message` no body
+- `presell-blocks.ts`: tipo `whatsapp_button` adicionado ao `PresellBlockKey`
+- `renderPresellHtml`: renderiza botão SVG fixo bottom-right antes do `</body>`
+- `presells.new.tsx`: campos opcionais Phone + Mensagem na criação
+- `presells.$id.edit.tsx`: case `whatsapp_button` no BlockEditor (phone, mensagem, cor)
+- Backfill automático para presells antigas no editor (sem whatsapp_button no DB)
+
+#### Página de Política de Privacidade
+- Nova rota `src/routes/pre.$slug.privacidade.tsx` → `/pre/:slug/privacidade`
+- Server function busca title + disclosure do Supabase
+- Seções: afiliado, dados coletados, cookies, conteúdo, contato
+- Rodapé de todas as presells agora tem link "Política de Privacidade"
+- Nota clara sobre depoimentos placeholder e sem cookie stuffing
 
 ---
 
 ## Estado atual dos 3 fluxos
 
 ### 1. Presell (generate-presell)
-- ✅ Fluxo básico: affiliate_url + source_url opcional → IA gera → editar
-- ✅ 6 tipos principais: review, advertorial, vsl, comparativo, quiz, bridge
+- ✅ Fluxo: affiliate_url + source_url opcional → IA gera → editor visual
+- ✅ 6 tipos conteúdo: review, advertorial, vsl, comparativo, quiz, bridge
 - ✅ Gate pages: age_gate, gender_gate, country_gate, captcha_gate
 - ✅ Urgência: countdown, coupon
-- ✅ Extração de cor do site do produtor
-- ✅ repairJson, CORS handling
-- ❌ Detecção automática de idioma da página do produtor (pendente)
-- ❌ Botão WhatsApp flutuante (pendente)
-- ❌ Página de Política de Privacidade (pendente)
+- ✅ Cores da marca extraídas do site do produtor
+- ✅ Detecção automática de idioma (detectLangFromHtml)
+- ✅ Botão WhatsApp flutuante (opcional, configurável no editor)
+- ✅ Página de Política de Privacidade auto-gerada por slug
+- ⬜ Deploy: aguardando confirmação do usuário (constraint: sem deploy sem ok explícito)
 
 ### 2. Ebook (generate-ebook)
 - ✅ Geração com Gemini/OpenAI/Lovable
-- ✅ PDF com imagens por capítulo (LoremFlickr — gratuito, CORS ok)
+- ✅ Bug Gemini key corrigido e deployado (sessão 1)
+- ✅ PDF com imagens LoremFlickr por capítulo
 - ✅ Editor visual pós-geração
-- ✅ Exportação PDF com capa colorida + sumário + capítulos + imagens
-- ❌ Não deployado ainda (generate-ebook foi deployado com a correção do Gemini key)
 
-### 3. Página de Vendas (generate-sales-page + generate-sales-page-from-prompt)
+### 3. Página de Vendas (generate-sales-page)
 - ✅ Geração a partir do ebook
-- ✅ Geração a partir de prompt livre (formulário standalone)
+- ✅ Geração a partir de prompt livre (generate-sales-page-from-prompt)
 - ✅ Editor de blocos com preview ao vivo
-- ✅ Melhoria de blocos com IA (improve-copy)
-- ✅ Polling corrigido — editor atualiza quando IA termina
-- ❌ generate-sales-page e generate-sales-page-from-prompt não deployados
+- ✅ Polling corrigido: editor atualiza quando IA termina (sessão 1)
+- ✅ Bug Gemini key + repairJson corrigidos (sessão 1, não deployado)
+- ⬜ Deploy: aguardando confirmação do usuário
 
 ---
 
-## Pendências técnicas (em ordem de prioridade)
+## Pendências
 
-1. **[PRESELL] Detecção de idioma automática**
-   - Extrair atributo `lang` do HTML da página do produtor
-   - Adicionar opção "Auto" no select de idioma
-   - Passar idioma detectado ao prompt da IA
-
-2. **[PRESELL] Botão WhatsApp flutuante**
-   - Campo opcional na criação: número + mensagem
-   - Renderiza como botão fixo verde no canto inferior direito
-   - Editável no editor de presell
-
-3. **[PRESELL] Página de Política de Privacidade**
-   - Rota pública `/pre/:slug/privacidade`
-   - HTML simples com disclosure de afiliado
-   - Link automático no rodapé das presells
-
-4. **[DEPLOY] Edge functions pendentes**
-   - generate-sales-page (corrigido localmente)
-   - Aguardando confirmação do usuário para fazer deploy
+1. **[DEPLOY] generate-presell** — tem todas as features novas, precisa de deploy
+2. **[DEPLOY] generate-sales-page** — Gemini key + repairJson corrigidos, precisa de deploy
+3. **[OPCIONAL] Presell: testimoniais gerados pela IA**  
+   - Nos tipos review/story/advertorial, a IA pode gerar testemunhos mas devem ser marcados como `[EXEMPLO]`
+   - Atualmente o prompt não instrui sobre isso explicitamente (mas a página de vendas já tem aviso de placeholder)
 
 ---
 
-## Decisões tomadas (para referência)
+## Decisões tomadas
 
-- Imagens no PDF do ebook: usando LoremFlickr (gratuito, CORS ok). TODO: permitir plug de API paga (Unsplash, Stability AI) no futuro. Não escolhi API paga conforme instrução.
-- Depoimentos: marcados como placeholder na UI e no HTML ("⚠️ Depoimentos de exemplo — substitua pelos reais antes de publicar"). NÃO gerados como reais.
-- Cloaking: nenhum redirect automático ou oculto implementado. Todos os CTAs usam clique real do usuário.
-- Deploy: nunca feito na main. Só na branch terminar-saas-claude.
+- Imagens PDF ebook: LoremFlickr (gratuito, CORS). Sem API paga conforme instrução.
+- Depoimentos: marcados como placeholder. Nunca apresentados como reais.
+- Sem cloaking, sem redirect automático, sem cookie stuffing.
+- WhatsApp: link `wa.me` — redirect real após clique do usuário.
+- Deploy: nunca na main. Só na branch `terminar-saas-claude`.
 
 ---
 
-## O que precisa de você (usuário)
+## O que precisa de você
 
-- ✅ Não precisa de nada urgente — os 3 fluxos funcionam com GEMINI_API_KEY
-- Opcional: para imagens de melhor qualidade no ebook, você pode conectar uma API paga de imagem (ex.: Stability AI, Dall-E). Avise quando quiser.
-- Para fazer deploy das edge functions corrigidas (generate-sales-page), avise.
+- Para **deploy das edge functions** (generate-presell, generate-sales-page): confirme "pode fazer deploy" e eu executo
+- Opcional: API de imagens paga (Stability AI, Dall-E) para ebook com imagens temáticas reais
