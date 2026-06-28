@@ -91,7 +91,7 @@ function EditPresell() {
     try {
       const b: PresellBlocks = { ...blocks, affiliate_url: affUrl, disclosure_text: disclosure, theme };
       const title = b.data.headline.title || page.title;
-      const html = renderPresellHtml(b, title);
+      const html = renderPresellHtml(b, title, page.slug);
       const { error } = await supabase.from("presells")
         .update({
           blocks: b, html_content: html, title,
@@ -122,7 +122,7 @@ function EditPresell() {
     window.open(affUrl, "_blank", "noopener,noreferrer");
   }
 
-  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", disclosure_text: disclosure, theme }, page.title);
+  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", disclosure_text: disclosure, theme }, page.title, page.slug);
   const isProcessing = page.status === "processing";
 
   return (

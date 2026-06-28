@@ -23,7 +23,7 @@ const fetchPresell = createServerFn({ method: "GET" })
       .maybeSingle();
     if (!row) return null;
     const html = row.blocks
-      ? renderPresellHtml(row.blocks as PresellBlocks, row.title)
+      ? renderPresellHtml(row.blocks as PresellBlocks, row.title, row.slug)
       : (row.html_content ?? "");
     return { title: row.title, slug: row.slug, html, og_image: row.product_image_url ?? null };
   });

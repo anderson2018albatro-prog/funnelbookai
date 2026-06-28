@@ -542,11 +542,15 @@ h2{text-align:left;border-bottom:3px solid var(--p);padding-bottom:10px;display:
 // ─────────────────────────────────────────────────────────────────────────────
 // Main renderer
 // ─────────────────────────────────────────────────────────────────────────────
-export function renderPresellHtml(blocks: PresellBlocks, fallbackTitle: string): string {
+export function renderPresellHtml(blocks: PresellBlocks, fallbackTitle: string, slug?: string): string {
   // Gate types: use specialized standalone renderer
   if ((GATE_TYPES as string[]).includes(blocks.type)) {
     return renderGateHtml(blocks, fallbackTitle);
   }
+
+  // Privacy policy lives at /pre/<slug>/privacidade. When slug is known, use an
+  // absolute path; otherwise fall back to a relative link (editor preview only).
+  const privacyHref = slug ? `/pre/${esc(slug)}/privacidade` : "privacidade";
 
   const d = blocks.data;
   const aff = blocks.affiliate_url || "#";
@@ -815,7 +819,7 @@ ${typeStyles(blocks.type)}
 ${sec.join("\n")}
 <footer class="aff-footer">
 <p class="disclosure">${esc(disclosure)}</p>
-<p>© ${new Date().getFullYear()}. Conteúdo independente. · <a href="privacidade" style="color:inherit;text-decoration:underline">Política de Privacidade</a></p>
+<p>© ${new Date().getFullYear()}. Conteúdo independente. · <a href="${privacyHref}" style="color:inherit;text-decoration:underline">Política de Privacidade</a></p>
 </footer>
 ${stickyCta}
 ${cookieOverlay}
