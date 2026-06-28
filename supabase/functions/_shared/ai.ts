@@ -12,7 +12,7 @@ async function callOpenAI(key: string, messages: Msg[], maxTokens: number): Prom
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.7, max_tokens: maxTokens, messages }),
+      body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.7, max_tokens: maxTokens, response_format: { type: "json_object" }, messages }),
     });
     if (res.ok) {
       const j = await res.json();
@@ -40,6 +40,11 @@ async function callGemini(key: string, messages: Msg[], maxTokens: number): Prom
       body: JSON.stringify({
         model: "gemini-2.5-flash",
         max_tokens: maxTokens,
+        // Desliga o "thinking" do Gemini 2.5: para saída estruturada (JSON) os
+        // tokens de raciocínio só consomem o budget e truncam o JSON no meio.
+        reasoning_effort: "none",
+        // JSON mode: força saída JSON válida na origem (evita aspas não escapadas).
+        response_format: { type: "json_object" },
         messages,
       }),
     }
@@ -58,7 +63,7 @@ async function callLovable(key: string, messages: Msg[], maxTokens: number): Pro
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, max_tokens: maxTokens }),
+    body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, max_tokens: maxTokens, response_format: { type: "json_object" } }),
   });
   if (res.ok) {
     const j = await res.json();

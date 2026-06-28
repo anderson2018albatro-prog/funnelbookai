@@ -86,7 +86,11 @@ function parseLoose(raw: string): any {
   try { return JSON.parse(sanitizeLlmJson(cleaned)); } catch (_) { /* continua */ }
   try { return JSON.parse(jsonrepair(cleaned)); } catch (_) { /* continua */ }
   try { return JSON.parse(jsonrepair(sanitizeLlmJson(cleaned))); } catch (e) {
-    throw new Error(`JSON inválido da IA após reparos: ${(e as Error).message}. Prévia: ${cleaned.slice(0, 200)}`);
+    const msg = (e as Error).message;
+    // mostra a janela ao redor da posição da falha para diagnóstico
+    const pos = Number(msg.match(/position (\d+)/)?.[1] ?? -1);
+    const ctx = pos >= 0 ? cleaned.slice(Math.max(0, pos - 80), pos + 80) : cleaned.slice(0, 200);
+    throw new Error(`JSON inválido da IA após reparos: ${msg}. Contexto: …${ctx}…`);
   }
 }
 
@@ -146,13 +150,14 @@ PADRÃO DE QUALIDADE — cada capítulo deve ter:
 • Pelo menos 1 exemplo prático real e aplicável
 • Dicas concretas e acionáveis para o público "${briefing.publico_alvo}"
 • Mini-resumo ou próximo passo ao final
-• Mínimo de 500 palavras por capítulo
+• Entre 400 e 550 palavras por capítulo — NÃO ultrapasse 550 (texto longo demais corta o final do ebook)
 
 REGRAS TÉCNICAS ABSOLUTAS:
 1. Retorne APENAS o JSON. Sem texto antes. Sem texto depois. Sem cercas de código.
 2. Use \\n\\n para separar parágrafos dentro de strings. NUNCA quebras de linha literais.
 3. Escape aspas dentro de strings como \\".
 4. O array "chapters" deve ter EXATAMENTE ${chapters} objetos.
+5. Preencha TODOS os campos do schema, incluindo "conclusion", "call_to_action" e "bonus" no final. Seja conciso nos capítulos para garantir que o JSON termine completo.
 
 SCHEMA (preencha todos os campos com conteúdo rico e específico):
 {
@@ -163,7 +168,7 @@ SCHEMA (preencha todos os campos com conteúdo rico e específico):
   "chapters": [
     {
       "title": "Título específico do capítulo",
-      "content": "Conteúdo rico de 500+ palavras com conceitos, exemplos e dicas. Parágrafos separados por \\n\\n."
+      "content": "Conteúdo rico de 400-550 palavras com conceitos, exemplos e dicas. Parágrafos separados por \\n\\n."
     }
   ],
   "conclusion": "Conclusão inspiradora de 2 parágrafos que recapitula os principais aprendizados e incentiva a ação",
