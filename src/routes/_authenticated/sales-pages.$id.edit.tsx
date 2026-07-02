@@ -11,12 +11,18 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ExternalLink, Eye, EyeOff,
-  Loader2, Plus, Save, Sparkles, Trash2, Upload, X,
+  Loader2, Plus, RefreshCw, Save, Sparkles, Trash2, Upload, X,
 } from "lucide-react";
 import {
-  BLOCK_LABELS, DEFAULT_ORDER, buildBlocksFromAI, renderBlocksToHtml,
-  type BlockKey, type SalesBlocks,
+  BLOCK_LABELS, DEFAULT_ORDER, THEME_LABELS, backfillBlocks, buildBlocksFromAI, renderBlocksToHtml,
+  type BlockKey, type SalesBlocks, type SalesTheme,
 } from "@/lib/sales-blocks";
+
+const THEME_SWATCHES: Record<SalesTheme, string> = {
+  clean: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+  dark: "linear-gradient(135deg,#0b1020,#c9a227)",
+  highconvert: "linear-gradient(135deg,#dc2626,#facc15)",
+};
 
 export const Route = createFileRoute("/_authenticated/sales-pages/$id/edit")({
   component: EditPage,
@@ -30,6 +36,7 @@ function EditPage() {
   const [aiTarget, setAiTarget] = useState<BlockKey | null>(null);
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [regenTarget, setRegenTarget] = useState<BlockKey | null>(null);
 
   const pageQ = useQuery({
     queryKey: ["sales-page", id],
@@ -46,7 +53,7 @@ function EditPage() {
     const status = (pageQ.data as any).status as string;
     const b = (pageQ.data as any).blocks as SalesBlocks | null;
     if (b && b.data) {
-      setBlocks(b);
+      setBlocks(backfillBlocks(b));
     } else if (status !== "processing") {
       setBlocks(buildBlocksFromAI({}, pageQ.data.title));
     }
@@ -151,6 +158,27 @@ function EditPage() {
     } catch (e: any) { toast.error(e.message); } finally { setAiBusy(false); }
   }
 
+  // Regenera UMA seção via IA sem refazer a página toda
+  async function regenerateSection(key: BlockKey) {
+    setRegenTarget(key);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-sales-page-from-prompt", {
+        body: { action: "regenerate_section", page_id: id, section: key, instruction: aiTarget === key ? aiInstruction : "" },
+      });
+      if (error) {
+        let m = error.message;
+        try { const c: any = (error as any).context; if (c?.json) { const j = await c.json(); if (j?.error) m = j.error; } } catch { /* noop */ }
+        throw new Error(m);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const block = (data as any).block;
+      if (block) updateBlock(key, block);
+      toast.success(`Seção "${BLOCK_LABELS[key]}" regenerada`);
+      setAiInstruction("");
+      qc.invalidateQueries({ queryKey: ["sales-page", id] });
+    } catch (e: any) { toast.error(e.message); } finally { setRegenTarget(null); }
+  }
+
   const previewHtml = blocks ? renderBlocksToHtml(blocks, page.title) : "";
 
   return (
@@ -190,6 +218,26 @@ function EditPage() {
         <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
           {/* Editor */}
           <div className="space-y-3">
+            {/* Tema visual */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <Label>Tema visual</Label>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {(Object.keys(THEME_LABELS) as SalesTheme[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setBlocks((prev) => prev && ({ ...prev, theme: t }))}
+                    className={`rounded-xl border p-2 text-left text-xs transition-all ${
+                      (blocks!.theme ?? "clean") === t ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="mb-1.5 h-6 w-full rounded" style={{ background: THEME_SWATCHES[t] }} />
+                    <div className="font-semibold">{THEME_LABELS[t]}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {blocks!.order.map((key) => {
               const b: any = (blocks!.data as any)[key];
               return (
@@ -202,7 +250,10 @@ function EditPage() {
                       <Button size="icon" variant="ghost" onClick={() => toggleVisible(key)}>
                         {b.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                       </Button>
-                      <Button size="icon" variant="ghost" onClick={() => setAiTarget(aiTarget === key ? null : key)}>
+                      <Button size="icon" variant="ghost" title="Regenerar seção com IA" onClick={() => regenerateSection(key)} disabled={regenTarget === key}>
+                        {regenTarget === key ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 text-primary" />}
+                      </Button>
+                      <Button size="icon" variant="ghost" title="Melhorar com instrução" onClick={() => setAiTarget(aiTarget === key ? null : key)}>
                         <Sparkles className="h-4 w-4 text-primary" />
                       </Button>
                     </div>
@@ -221,6 +272,9 @@ function EditPage() {
                         />
                         <Button onClick={() => runAI(key)} disabled={aiBusy} className="bg-gradient-primary text-primary-foreground">
                           {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        </Button>
+                        <Button variant="outline" title="Regenerar a seção inteira seguindo a instrução" onClick={() => regenerateSection(key)} disabled={regenTarget === key}>
+                          {regenTarget === key ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         </Button>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -293,10 +347,59 @@ function BlockEditor({
       );
     case "promessa":
     case "garantia":
+    case "dor":
+    case "urgencia":
       return (
         <div className="space-y-2">
           <Input value={block.title} onChange={(e) => update({ title: e.target.value })} placeholder="Título" />
-          <Textarea value={block.text} onChange={(e) => update({ text: e.target.value })} rows={3} placeholder="Texto" />
+          <Textarea value={block.text} onChange={(e) => update({ text: e.target.value })} rows={blockKey === "dor" ? 5 : 3} placeholder="Texto" />
+        </div>
+      );
+    case "video_vsl":
+      return (
+        <div className="space-y-2">
+          <Input value={block.title} onChange={(e) => update({ title: e.target.value })} placeholder="Título da seção" />
+          <Input value={block.video_url} onChange={(e) => update({ video_url: e.target.value })} placeholder="URL do vídeo (YouTube/Vimeo)" />
+          <Input value={block.placeholder_text} onChange={(e) => update({ placeholder_text: e.target.value })} placeholder="Texto do placeholder (antes de ter vídeo)" />
+        </div>
+      );
+    case "mecanismo":
+      return (
+        <div className="space-y-2">
+          <Input value={block.title} onChange={(e) => update({ title: e.target.value })} placeholder="Título da seção" />
+          <Input value={block.nome} onChange={(e) => update({ nome: e.target.value })} placeholder='Nome do mecanismo (ex.: "Método Trinca 3x7")' />
+          <Textarea value={block.text} onChange={(e) => update({ text: e.target.value })} rows={4} placeholder="Descrição de por que funciona" />
+        </div>
+      );
+    case "stack":
+      return (
+        <div className="space-y-2">
+          <Input value={block.title} onChange={(e) => update({ title: e.target.value })} placeholder="Título" />
+          {(block.items || []).map((it: any, i: number) => (
+            <div key={i} className="grid grid-cols-[1fr,110px,auto] gap-1">
+              <Input value={it.item} placeholder="Item da oferta" onChange={(e) => {
+                const items = [...block.items]; items[i] = { ...it, item: e.target.value }; update({ items });
+              }} />
+              <Input value={it.valor} placeholder="R$497" onChange={(e) => {
+                const items = [...block.items]; items[i] = { ...it, valor: e.target.value }; update({ items });
+              }} />
+              <Button size="icon" variant="ghost" onClick={() => update({ items: block.items.filter((_: any, x: number) => x !== i) })}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => update({ items: [...(block.items || []), { item: "", valor: "" }] })}>
+            <Plus className="mr-1 h-3 w-3" /> Item
+          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={block.total_value} onChange={(e) => update({ total_value: e.target.value })} placeholder="Valor total ancorado (R$1.244)" />
+            <Input value={block.price} onChange={(e) => update({ price: e.target.value })} placeholder="Preço real (12x R$9,74)" />
+          </div>
+          <Input value={block.anchor_text} onChange={(e) => update({ anchor_text: e.target.value })} placeholder="Frase de ancoragem" />
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={block.cta_text} onChange={(e) => update({ cta_text: e.target.value })} placeholder="Texto do botão" />
+            <Input value={block.cta_url} onChange={(e) => update({ cta_url: e.target.value })} placeholder="Link do checkout" />
+          </div>
         </div>
       );
     case "beneficios":

@@ -48,7 +48,7 @@ function Profile() {
   }, [profile]);
 
   async function save() {
-    if (!profile) return;
+    if (!profile?.id) return;
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ nome }).eq("id", profile.id);
     if (error) return toast.error(error.message);

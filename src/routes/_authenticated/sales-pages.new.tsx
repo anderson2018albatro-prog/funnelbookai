@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Megaphone, Sparkles } from "lucide-react";
+import { Loader2, Megaphone, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
+import { THEME_LABELS, type SalesTheme } from "@/lib/sales-blocks";
 
 export const Route = createFileRoute("/_authenticated/sales-pages/new")({
   component: NewSalesPage,
@@ -22,9 +23,50 @@ const PAGE_TYPES = [
   { v: "webinar", label: "🎙️ Webinar / Evento", desc: "Inscrição para evento ao vivo ou gravado" },
 ];
 
+// Chips de sugestão: inserem trechos prontos no comando livre
+const PROMPT_CHIPS = [
+  { label: "🎯 Nicho", text: "Nicho: confeitaria. " },
+  { label: "👥 Público", text: "Público: mulheres de 30 a 50 anos. " },
+  { label: "💰 Preço", text: "Preço: R$97. " },
+  { label: "🗣️ Tom", text: "Tom: acolhedor e direto. " },
+  { label: "⏰ Urgência", text: "Com urgência de bônus por tempo limitado. " },
+  { label: "🎁 Bônus", text: "Inclua 3 bônus com valores. " },
+  { label: "🛡️ Garantia", text: "Garantia incondicional de 30 dias. " },
+  { label: "📹 VSL", text: "Quero uma página com vídeo de vendas (VSL). " },
+];
+
+const THEME_SWATCHES: Record<SalesTheme, string> = {
+  clean: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+  dark: "linear-gradient(135deg,#0b1020,#c9a227)",
+  highconvert: "linear-gradient(135deg,#dc2626,#facc15)",
+};
+
+function ThemePicker({ value, onChange }: { value: SalesTheme; onChange: (t: SalesTheme) => void }) {
+  return (
+    <div>
+      <Label>Tema visual</Label>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {(Object.keys(THEME_LABELS) as SalesTheme[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onChange(t)}
+            className={`rounded-xl border p-3 text-left text-xs transition-all ${
+              value === t ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/40"
+            }`}
+          >
+            <div className="mb-2 h-8 w-full rounded-md" style={{ background: THEME_SWATCHES[t] }} />
+            <div className="font-semibold">{THEME_LABELS[t]}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function NewSalesPage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+  const [mode, setMode] = useState<"free" | "briefing">("free");
   const [form, setForm] = useState({
     prompt: "",
     product_name: "",
@@ -40,12 +82,17 @@ function NewSalesPage() {
     language: "pt-BR",
     tone: "persuasivo",
     page_type: "vendas",
+    theme: "clean" as SalesTheme,
   });
   const [busy, setBusy] = useState(false);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   async function submit() {
-    if (!form.product_name && !form.prompt) {
+    if (mode === "free" && !form.prompt.trim()) {
+      toast.error("Descreva o que você quer criar");
+      return;
+    }
+    if (mode === "briefing" && !form.product_name && !form.prompt) {
       toast.error("Informe o nome do produto ou descreva o que quer criar");
       return;
     }
@@ -68,6 +115,43 @@ function NewSalesPage() {
     } finally { setBusy(false); }
   }
 
+  const langAndTone = (
+    <div className="grid gap-3 md:grid-cols-2">
+      <div>
+        <Label>Tom de voz</Label>
+        <select className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
+          value={form.tone} onChange={(e) => set("tone", e.target.value)}>
+          <option value="persuasivo">Persuasivo — convence com lógica e emoção</option>
+          <option value="profissional">Profissional — formal e técnico</option>
+          <option value="amigavel">Amigável — próximo e acessível</option>
+          <option value="agressivo">Agressivo — direto ao ponto, sem rodeios</option>
+          <option value="premium">Premium — exclusivo, sofisticado</option>
+        </select>
+      </div>
+      <div>
+        <Label>Idioma</Label>
+        <select className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
+          value={form.language} onChange={(e) => set("language", e.target.value)}>
+          <option value="pt-BR">🇧🇷 Português (Brasil)</option>
+          <option value="pt-PT">🇵🇹 Português (Portugal)</option>
+          <option value="en">🇺🇸 Inglês</option>
+          <option value="es">🇪🇸 Espanhol</option>
+          <option value="fr">🇫🇷 Francês</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="de">🇩🇪 Alemão</option>
+          <option value="ja">🇯🇵 Japonês</option>
+          <option value="zh">🇨🇳 Mandarim</option>
+          <option value="ru">🇷🇺 Russo</option>
+          <option value="ar">🇸🇦 Árabe</option>
+          <option value="hi">🇮🇳 Hindi</option>
+          <option value="nl">🇳🇱 Holandês</option>
+          <option value="pl">🇵🇱 Polonês</option>
+          <option value="tr">🇹🇷 Turco</option>
+        </select>
+      </div>
+    </div>
+  );
+
   return (
     <DashboardShell title="Nova Página de Vendas">
       <div className="mx-auto max-w-3xl space-y-5">
@@ -80,152 +164,174 @@ function NewSalesPage() {
           <div>
             <div className="font-display font-semibold">Gerador de Página de Vendas com IA</div>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Preencha o briefing do produto e a IA cria uma página completa: headline, benefícios, depoimentos, FAQ, oferta e CTA.
-              Você edita cada bloco depois.
+              Descreva o que quer (ou preencha o briefing) e a IA escolhe a melhor estrutura — VSL, carta longa,
+              lançamento, low ticket, high ticket ou assinatura — e escreve a copy completa. Você edita cada bloco depois.
             </p>
           </div>
         </div>
 
-        {/* Step 1: Type + Product */}
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <h2 className="font-display font-semibold">1. Produto e tipo de página</h2>
-
-          <div>
-            <Label>Tipo de página</Label>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {PAGE_TYPES.map((t) => (
-                <button
-                  key={t.v}
-                  type="button"
-                  onClick={() => set("page_type", t.v)}
-                  className={`flex items-start gap-3 rounded-xl border p-3 text-left text-sm transition-all ${
-                    form.page_type === t.v
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background hover:border-primary/40"
-                  }`}
-                >
-                  <div>
-                    <div className="font-semibold">{t.label}</div>
-                    <div className="text-xs text-muted-foreground">{t.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>Nome do produto <span className="text-destructive">*</span></Label>
-              <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
-                placeholder="Ex.: Curso Inglês Fluente em 90 Dias" />
-            </div>
-            <div>
-              <Label>Nicho / categoria</Label>
-              <Input value={form.niche} onChange={(e) => set("niche", e.target.value)}
-                placeholder="Ex.: idiomas, marketing digital, saúde..." />
-            </div>
-          </div>
+        {/* Mode toggle */}
+        <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 w-fit">
+          <Button size="sm" variant={mode === "free" ? "secondary" : "ghost"} onClick={() => setMode("free")} className="h-8 px-4 text-xs">
+            <Wand2 className="mr-1 h-3 w-3" /> Criar com IA (comando livre)
+          </Button>
+          <Button size="sm" variant={mode === "briefing" ? "secondary" : "ghost"} onClick={() => setMode("briefing")} className="h-8 px-4 text-xs">
+            Briefing detalhado
+          </Button>
         </div>
 
-        {/* Step 2: Copy briefing */}
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <h2 className="font-display font-semibold">2. Briefing de copy</h2>
+        {mode === "free" && (
+          <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+            <div>
+              <Label>Descreva livremente o que você quer</Label>
+              <Textarea
+                rows={6}
+                className="mt-1 text-base"
+                value={form.prompt}
+                onChange={(e) => set("prompt", e.target.value)}
+                placeholder={'Ex.: "Quero uma página de vendas para um curso de confeitaria, público mulheres 30-50 anos, preço R$97, com urgência de bônus por tempo limitado e garantia de 30 dias."'}
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {PROMPT_CHIPS.map((c) => (
+                  <button
+                    key={c.label}
+                    type="button"
+                    onClick={() => set("prompt", (form.prompt.trim() ? form.prompt.replace(/\s*$/, " ") : "") + c.text)}
+                    className="rounded-full border border-border bg-surface px-3 py-1 text-xs transition-colors hover:border-primary/50 hover:bg-primary/10"
+                  >
+                    + {c.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                A IA interpreta o comando e decide a melhor estrutura de página para o seu caso.
+              </p>
+            </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+            <ThemePicker value={form.theme} onChange={(t) => setForm((p) => ({ ...p, theme: t }))} />
+
             <div>
-              <Label>Público-alvo</Label>
-              <Input value={form.target_audience} onChange={(e) => set("target_audience", e.target.value)}
-                placeholder="Ex.: adultos 30-50 anos que querem aprender inglês" />
+              <Label>Link do botão de compra (checkout Hotmart/Kiwify)</Label>
+              <Input value={form.button_url} onChange={(e) => set("button_url", e.target.value)}
+                placeholder="https://pay.hotmart.com/... ou https://pay.kiwify.com.br/..." />
             </div>
-            <div>
-              <Label>Promessa principal</Label>
-              <Input value={form.promessa} onChange={(e) => set("promessa", e.target.value)}
-                placeholder="Ex.: falar inglês fluente em 90 dias sem sotaque" />
-            </div>
+
+            {langAndTone}
           </div>
+        )}
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>Dor / problema do cliente</Label>
-              <Input value={form.dor_principal} onChange={(e) => set("dor_principal", e.target.value)}
-                placeholder="Ex.: vergonha de falar inglês, travar nas palavras" />
-            </div>
-            <div>
-              <Label>Resultado desejado</Label>
-              <Input value={form.resultado_esperado} onChange={(e) => set("resultado_esperado", e.target.value)}
-                placeholder="Ex.: conseguir promoção, viajar com confiança" />
-            </div>
-          </div>
+        {mode === "briefing" && (
+          <>
+            {/* Step 1: Type + Product */}
+            <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+              <h2 className="font-display font-semibold">1. Produto e tipo de página</h2>
 
-          <div>
-            <Label>Instruções extras para a IA</Label>
-            <Textarea rows={2} value={form.prompt} onChange={(e) => set("prompt", e.target.value)}
-              placeholder="Ex.: enfatize que não precisa ter base prévia; mencione que é 100% online; inclua urgência de vagas limitadas" />
-          </div>
-        </div>
+              <div>
+                <Label>Tipo de página</Label>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {PAGE_TYPES.map((t) => (
+                    <button
+                      key={t.v}
+                      type="button"
+                      onClick={() => set("page_type", t.v)}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-left text-sm transition-all ${
+                        form.page_type === t.v
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background hover:border-primary/40"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold">{t.label}</div>
+                        <div className="text-xs text-muted-foreground">{t.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        {/* Step 3: Offer */}
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <h2 className="font-display font-semibold">3. Oferta e preço</h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Nome do produto <span className="text-destructive">*</span></Label>
+                  <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
+                    placeholder="Ex.: Curso Inglês Fluente em 90 Dias" />
+                </div>
+                <div>
+                  <Label>Nicho / categoria</Label>
+                  <Input value={form.niche} onChange={(e) => set("niche", e.target.value)}
+                    placeholder="Ex.: idiomas, marketing digital, saúde..." />
+                </div>
+              </div>
+            </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>Preço / oferta</Label>
-              <Input value={form.offer} onChange={(e) => set("offer", e.target.value)}
-                placeholder="Ex.: 12x R$19,70 ou R$197 à vista" />
-            </div>
-            <div>
-              <Label>Garantia</Label>
-              <Input value={form.garantia} onChange={(e) => set("garantia", e.target.value)}
-                placeholder="Ex.: 30 dias de garantia incondicional" />
-            </div>
-          </div>
+            {/* Step 2: Copy briefing */}
+            <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+              <h2 className="font-display font-semibold">2. Briefing de copy</h2>
 
-          <div>
-            <Label>Link do botão de compra</Label>
-            <Input value={form.button_url} onChange={(e) => set("button_url", e.target.value)}
-              placeholder="https://pay.hotmart.com/... ou https://go.exemplo.com/..." />
-          </div>
-        </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Público-alvo</Label>
+                  <Input value={form.target_audience} onChange={(e) => set("target_audience", e.target.value)}
+                    placeholder="Ex.: adultos 30-50 anos que querem aprender inglês" />
+                </div>
+                <div>
+                  <Label>Promessa principal</Label>
+                  <Input value={form.promessa} onChange={(e) => set("promessa", e.target.value)}
+                    placeholder="Ex.: falar inglês fluente em 90 dias sem sotaque" />
+                </div>
+              </div>
 
-        {/* Step 4: Style */}
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <h2 className="font-display font-semibold">4. Estilo e idioma</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>Tom de voz</Label>
-              <select className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
-                value={form.tone} onChange={(e) => set("tone", e.target.value)}>
-                <option value="persuasivo">Persuasivo — convence com lógica e emoção</option>
-                <option value="profissional">Profissional — formal e técnico</option>
-                <option value="amigavel">Amigável — próximo e acessível</option>
-                <option value="agressivo">Agressivo — direto ao ponto, sem rodeios</option>
-                <option value="premium">Premium — exclusivo, sofisticado</option>
-              </select>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Dor / problema do cliente</Label>
+                  <Input value={form.dor_principal} onChange={(e) => set("dor_principal", e.target.value)}
+                    placeholder="Ex.: vergonha de falar inglês, travar nas palavras" />
+                </div>
+                <div>
+                  <Label>Resultado desejado</Label>
+                  <Input value={form.resultado_esperado} onChange={(e) => set("resultado_esperado", e.target.value)}
+                    placeholder="Ex.: conseguir promoção, viajar com confiança" />
+                </div>
+              </div>
+
+              <div>
+                <Label>Instruções extras para a IA</Label>
+                <Textarea rows={2} value={form.prompt} onChange={(e) => set("prompt", e.target.value)}
+                  placeholder="Ex.: enfatize que não precisa ter base prévia; mencione que é 100% online; inclua urgência de vagas limitadas" />
+              </div>
             </div>
-            <div>
-              <Label>Idioma</Label>
-              <select className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
-                value={form.language} onChange={(e) => set("language", e.target.value)}>
-                <option value="pt-BR">🇧🇷 Português (Brasil)</option>
-                <option value="pt-PT">🇵🇹 Português (Portugal)</option>
-                <option value="en">🇺🇸 Inglês</option>
-                <option value="es">🇪🇸 Espanhol</option>
-                <option value="fr">🇫🇷 Francês</option>
-                <option value="it">🇮🇹 Italiano</option>
-                <option value="de">🇩🇪 Alemão</option>
-                <option value="ja">🇯🇵 Japonês</option>
-                <option value="zh">🇨🇳 Mandarim</option>
-                <option value="ru">🇷🇺 Russo</option>
-                <option value="ar">🇸🇦 Árabe</option>
-                <option value="hi">🇮🇳 Hindi</option>
-                <option value="nl">🇳🇱 Holandês</option>
-                <option value="pl">🇵🇱 Polonês</option>
-                <option value="tr">🇹🇷 Turco</option>
-              </select>
+
+            {/* Step 3: Offer */}
+            <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+              <h2 className="font-display font-semibold">3. Oferta e preço</h2>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Preço / oferta</Label>
+                  <Input value={form.offer} onChange={(e) => set("offer", e.target.value)}
+                    placeholder="Ex.: 12x R$19,70 ou R$197 à vista" />
+                </div>
+                <div>
+                  <Label>Garantia</Label>
+                  <Input value={form.garantia} onChange={(e) => set("garantia", e.target.value)}
+                    placeholder="Ex.: 30 dias de garantia incondicional" />
+                </div>
+              </div>
+
+              <div>
+                <Label>Link do botão de compra</Label>
+                <Input value={form.button_url} onChange={(e) => set("button_url", e.target.value)}
+                  placeholder="https://pay.hotmart.com/... ou https://go.exemplo.com/..." />
+              </div>
             </div>
-          </div>
-        </div>
+
+            {/* Step 4: Style */}
+            <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+              <h2 className="font-display font-semibold">4. Estilo e idioma</h2>
+              <ThemePicker value={form.theme} onChange={(t) => setForm((p) => ({ ...p, theme: t }))} />
+              {langAndTone}
+            </div>
+          </>
+        )}
 
         <Button onClick={submit} disabled={busy} className="w-full bg-gradient-primary text-primary-foreground shadow-glow" size="lg">
           {busy ? (
@@ -235,7 +341,7 @@ function NewSalesPage() {
           )}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
-          A IA vai gerar: headline, benefícios, depoimentos, FAQ, oferta e CTAs. Leva ~30-60 segundos.
+          A IA escolhe a estrutura e gera: headline, lead de dor, mecanismo único, bullets, stack da oferta, bônus, garantia, FAQ e CTAs. Leva ~30-60 segundos.
         </p>
       </div>
     </DashboardShell>
