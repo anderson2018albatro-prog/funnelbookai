@@ -1,9 +1,44 @@
 // Shared AI helper.
-// Ordem de tentativa: LOVABLE_API_KEY → GEMINI_API_KEY → OPENAI_API_KEY
+// Ordem de tentativa: ANTHROPIC_API_KEY (Claude Fable 5) → LOVABLE_API_KEY → GEMINI_API_KEY → OPENAI_API_KEY
 // Gemini (Google AI Studio) é gratuito: 1500 req/dia, 1M tokens/min.
 // OpenAI faz retry automático em 429 (rate limit), mas não em quota esgotada.
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
+
+// Claude Fable 5 via Messages API. Fallback server-side para Opus 4.8 em caso
+// de recusa dos classificadores. Sem temperature/thinking (rejeitados no Fable 5).
+async function callAnthropic(key: string, messages: Msg[], maxTokens: number): Promise<string> {
+  const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+  const turns = messages.filter((m) => m.role !== "system");
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "server-side-fallback-2026-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-fable-5",
+      max_tokens: maxTokens,
+      fallbacks: [{ model: "claude-opus-4-8" }],
+      ...(system ? { system } : {}),
+      messages: turns.map((m) => ({ role: m.role, content: m.content })),
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Anthropic ${res.status}: ${t.slice(0, 400)}`);
+  }
+  const j = await res.json();
+  if (j.stop_reason === "refusal") throw new Error("Anthropic: pedido recusado pelos classificadores");
+  const c = (j.content ?? [])
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("");
+  if (!c) throw new Error("Anthropic: resposta vazia");
+  return c;
+}
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -76,11 +111,17 @@ async function callLovable(key: string, messages: Msg[], maxTokens: number): Pro
 }
 
 export async function chatCompletion(messages: Msg[], maxTokens = 4096): Promise<string> {
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
   const geminiKey  = Deno.env.get("GEMINI_API_KEY");
   const openaiKey  = Deno.env.get("OPENAI_API_KEY");
 
   const errs: string[] = [];
+
+  if (anthropicKey) {
+    try { return await callAnthropic(anthropicKey, messages, maxTokens); }
+    catch (e) { errs.push(`Anthropic: ${(e as Error).message}`); }
+  }
 
   if (lovableKey) {
     try { return await callLovable(lovableKey, messages, maxTokens); }
@@ -97,8 +138,8 @@ export async function chatCompletion(messages: Msg[], maxTokens = 4096): Promise
     catch (e) { errs.push(`OpenAI: ${(e as Error).message}`); }
   }
 
-  if (!lovableKey && !geminiKey && !openaiKey) {
-    throw new Error("Nenhuma chave de IA configurada. Configure GEMINI_API_KEY (gratuito) ou OPENAI_API_KEY.");
+  if (!anthropicKey && !lovableKey && !geminiKey && !openaiKey) {
+    throw new Error("Nenhuma chave de IA configurada. Configure ANTHROPIC_API_KEY (Claude Fable 5), GEMINI_API_KEY (gratuito) ou OPENAI_API_KEY.");
   }
   throw new Error(`Falha em todos os provedores:\n${errs.join("\n")}`);
 }
