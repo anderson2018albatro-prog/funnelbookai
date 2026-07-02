@@ -9,31 +9,11 @@ import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { jsPDF } from "jspdf";
+import { chapterBannerSvg, coverSvg, paletteFor, svgDataUrl, svgToPngDataUrl } from "@/lib/ebook-art";
 
-function chapterImageUrl(title: string): string {
-  // Use LoremFlickr — free, CORS enabled, topic-relevant images
-  const kw = encodeURIComponent(
-    title.replace(/[^\w\sÀ-ÿ]/g, " ").trim().split(/\s+/).slice(0, 3).join(",")
-  );
-  return `https://loremflickr.com/1200/380/${kw}?lock=${Math.abs(title.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 1000}`;
-}
-
-async function imgToDataUrl(url: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      try {
-        const c = document.createElement("canvas");
-        c.width = img.naturalWidth || 1200;
-        c.height = img.naturalHeight || 400;
-        c.getContext("2d")!.drawImage(img, 0, 0);
-        resolve(c.toDataURL("image/jpeg", 0.8));
-      } catch { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+function hexToRgb(hex: string): [number, number, number] {
+  const m = hex.replace("#", "");
+  return [parseInt(m.slice(0, 2), 16), parseInt(m.slice(2, 4), 16), parseInt(m.slice(4, 6), 16)];
 }
 
 /** Normalize a field that the AI may return as string, array, or null. */
@@ -47,16 +27,26 @@ function asArray(v: unknown): string[] {
   return [String(v)];
 }
 
+type EbookChapter = {
+  title: string;
+  content: string;
+  acao_pratica?: string;
+  image_description?: string;
+};
+
 type EbookContent = {
   title?: string;
   subtitle?: string;
+  cover_promise?: string;
+  autor?: string;
   introduction?: string;
   summary?: string[];
-  chapters?: { title: string; content: string }[];
+  chapters?: EbookChapter[];
   conclusion?: string;
   call_to_action?: string;
   bonus?: string[];
   briefing?: any;
+  progress?: { done: number; total: number };
 };
 
 /** Accept content as JSON, JSON string, or loose shapes (chapters/capitulos/text/body/conteudo). */
@@ -73,6 +63,8 @@ function normalizeEbookContent(raw: unknown): EbookContent {
     ? chaptersRaw.map((ch: any) => ({
         title: String(ch?.title ?? ch?.titulo ?? ch?.name ?? ""),
         content: String(ch?.content ?? ch?.conteudo ?? ch?.text ?? ch?.body ?? ""),
+        acao_pratica: String(ch?.acao_pratica ?? ch?.practical_action ?? ""),
+        image_description: String(ch?.image_description ?? ""),
       }))
     : [];
 
@@ -82,6 +74,8 @@ function normalizeEbookContent(raw: unknown): EbookContent {
   return {
     title: obj.title ?? obj.titulo,
     subtitle: obj.subtitle ?? obj.subtitulo,
+    cover_promise: obj.cover_promise ?? "",
+    autor: obj.autor ?? obj.author ?? obj.briefing?.autor ?? "",
     introduction: typeof introduction === "string" ? introduction : "",
     summary: asArray(obj.summary ?? obj.sumario ?? obj.indice),
     chapters,
@@ -89,6 +83,7 @@ function normalizeEbookContent(raw: unknown): EbookContent {
     call_to_action: obj.call_to_action ?? obj.cta ?? obj.chamada ?? "",
     bonus: asArray(obj.bonus ?? obj.bonuses),
     briefing: obj.briefing,
+    progress: obj.progress,
   };
 }
 
@@ -159,7 +154,7 @@ function EbookDetail() {
 
   const ec = editedContent ?? c;
 
-  function updateChapter(i: number, field: "title" | "content", val: string) {
+  function updateChapter(i: number, field: "title" | "content" | "acao_pratica", val: string) {
     setEditedContent((prev) => {
       const chapters = [...(prev?.chapters ?? [])];
       chapters[i] = { ...chapters[i], [field]: val };
@@ -273,107 +268,202 @@ function EbookDetail() {
       const maxW = pageW - margin * 2;
       let y = margin;
 
-      function addPageNumber(n: number) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(120);
-        doc.text(String(n), pageW / 2, pageH - 24, { align: "center" });
-        doc.setTextColor(0);
-      }
+      const bookTitle = ec.title ?? title;
+      const author = ec.autor ?? "";
+      const palette = paletteFor(bookTitle);
+      const [pr, pg, pb] = hexToRgb(palette.from);
+
       function newPage() { doc.addPage(); y = margin; }
-      function ensure(h: number) { if (y + h > pageH - margin) newPage(); }
+      function ensure(h: number) { if (y + h > pageH - margin - 20) newPage(); }
       function writeHeading(text: string, size = 18) {
-        ensure(size + 20);
+        ensure(size + 24);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(size);
+        doc.setTextColor(pr, pg, pb);
         const lines = doc.splitTextToSize(text, maxW) as string[];
         doc.text(lines, margin, y);
+        doc.setTextColor(0);
         y += lines.length * (size + 4) + 8;
       }
-      function writeBody(text: string) {
+      function writeSubtitle(text: string) {
+        ensure(30);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13.5);
+        doc.setTextColor(pr, pg, pb);
+        const lines = doc.splitTextToSize(text, maxW) as string[];
+        doc.text(lines, margin, y);
+        doc.setTextColor(0);
+        y += lines.length * 18 + 6;
+      }
+      function writeParagraph(text: string) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(11);
-        // Split on double newlines (paragraph breaks) then wrap each paragraph
-        const paragraphs = text.split(/\n\n+/);
-        for (const para of paragraphs) {
-          const clean = para.replace(/\n/g, " ").trim();
-          if (!clean) continue;
-          const lines = doc.splitTextToSize(clean, maxW) as string[];
-          for (const line of lines) {
-            ensure(16);
-            doc.text(line, margin, y);
-            y += 16;
+        const clean = text.replace(/\n/g, " ").trim();
+        if (!clean) return;
+        const lines = doc.splitTextToSize(clean, maxW) as string[];
+        for (const line of lines) {
+          ensure(16);
+          doc.text(line, margin, y);
+          y += 16;
+        }
+        y += 10;
+      }
+      // Corpo com suporte a subtítulos "### " (hierarquia tipográfica)
+      function writeBody(text: string) {
+        const blocks = String(text ?? "").split(/\n\n+/);
+        for (const block of blocks) {
+          const b = block.trim();
+          if (!b) continue;
+          if (b.startsWith("### ")) {
+            const nl = b.indexOf("\n");
+            if (nl > 0) {
+              writeSubtitle(b.slice(4, nl).trim());
+              writeParagraph(b.slice(nl + 1));
+            } else {
+              writeSubtitle(b.slice(4).trim());
+            }
+          } else {
+            writeParagraph(b);
           }
-          y += 10; // espaço entre parágrafos
         }
         y += 4;
       }
-
-      doc.setFillColor(99, 102, 241);
-      doc.rect(0, 0, pageW, pageH, "F");
-      doc.setTextColor(255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(32);
-      const tLines = doc.splitTextToSize(ec.title ?? title, maxW) as string[];
-      doc.text(tLines, pageW / 2, pageH / 2 - 30, { align: "center" });
-      if (ec.subtitle) {
+      // Box destacado de "Ação Prática" ao final do capítulo
+      function writeActionBox(text: string) {
+        const items = String(text ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
+        if (!items.length) return;
+        doc.setFontSize(10.5);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(16);
-        const sLines = doc.splitTextToSize(ec.subtitle, maxW) as string[];
-        doc.text(sLines, pageW / 2, pageH / 2 + 20, { align: "center" });
+        const wrapped: string[] = [];
+        for (const it of items) {
+          wrapped.push(...(doc.splitTextToSize(it, maxW - 40) as string[]));
+        }
+        const boxH = 34 + wrapped.length * 15 + 14;
+        ensure(boxH + 10);
+        doc.setFillColor(pr, pg, pb);
+        doc.setGState(doc.GState({ opacity: 0.08 }));
+        doc.roundedRect(margin, y, maxW, boxH, 8, 8, "F");
+        doc.setGState(doc.GState({ opacity: 1 }));
+        doc.setDrawColor(pr, pg, pb);
+        doc.setLineWidth(1.2);
+        doc.roundedRect(margin, y, maxW, boxH, 8, 8, "S");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(pr, pg, pb);
+        doc.text("AÇÃO PRÁTICA", margin + 20, y + 24);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10.5);
+        doc.setTextColor(40);
+        let by = y + 44;
+        for (const line of wrapped) {
+          doc.text(line, margin + 20, by);
+          by += 15;
+        }
+        doc.setTextColor(0);
+        y += boxH + 16;
       }
-      doc.setTextColor(0);
+
+      // ── Página 1: capa gerada por código (gradiente + tipografia) ─────────
+      const coverPng = await svgToPngDataUrl(
+        coverSvg({ title: bookTitle, subtitle: ec.subtitle, promise: ec.cover_promise, author, seed: bookTitle }),
+        1000, 1414,
+      );
+      if (coverPng) {
+        doc.addImage(coverPng, "PNG", 0, 0, pageW, pageH);
+      } else {
+        doc.setFillColor(pr, pg, pb);
+        doc.rect(0, 0, pageW, pageH, "F");
+        doc.setTextColor(255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(32);
+        doc.text(doc.splitTextToSize(bookTitle, maxW) as string[], pageW / 2, pageH / 2 - 30, { align: "center" });
+        doc.setTextColor(0);
+      }
+
+      // ── Página 2: reservada para o sumário (preenchida no final, com links) ─
+      newPage();
+      const tocPage = doc.getNumberOfPages();
       newPage();
 
-      const summary = asArray(ec.summary);
       const chapters = Array.isArray(ec.chapters) ? ec.chapters : [];
       const bonus = asArray(ec.bonus);
+      const toc: { label: string; page: number }[] = [];
 
-      if (summary.length) {
-        writeHeading("Sumário", 22);
-        summary.forEach((s, i) => writeBody(`${i + 1}. ${s}`));
-        newPage();
-      }
+      // ── Conteúdo ──────────────────────────────────────────────────────────
       if (ec.introduction) {
+        toc.push({ label: "Introdução", page: doc.getNumberOfPages() });
         writeHeading("Introdução", 20);
         writeBody(ec.introduction);
       }
       for (let i = 0; i < chapters.length; i++) {
         const ch: any = chapters[i];
         newPage();
-        writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
-        if (ch?.title) {
-          const imgData = await imgToDataUrl(chapterImageUrl(ch.title));
-          if (imgData) {
-            const imgH = Math.round(maxW * 400 / 1200);
-            ensure(imgH + 16);
-            doc.addImage(imgData, "JPEG", margin, y, maxW, imgH);
-            y += imgH + 14;
-          }
+        toc.push({ label: `Capítulo ${i + 1}: ${ch?.title ?? ""}`, page: doc.getNumberOfPages() });
+        const bannerPng = await svgToPngDataUrl(
+          chapterBannerSvg({ index: i, title: ch?.title ?? "", imageDescription: ch?.image_description, seed: bookTitle }),
+          1200, 340,
+        );
+        if (bannerPng) {
+          const imgH = Math.round(maxW * 340 / 1200);
+          doc.addImage(bannerPng, "PNG", margin, y, maxW, imgH);
+          y += imgH + 20;
+        } else {
+          writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
         }
         const chContent = String(ch?.content ?? "").trim();
         if (chContent) writeBody(chContent);
+        if (ch?.acao_pratica) writeActionBox(ch.acao_pratica);
       }
       if (ec.conclusion) {
         newPage();
+        toc.push({ label: "Conclusão", page: doc.getNumberOfPages() });
         writeHeading("Conclusão", 20);
         writeBody(ec.conclusion);
       }
       if (ec.call_to_action) {
         ensure(80);
+        toc.push({ label: "Próximos passos", page: doc.getNumberOfPages() });
         writeHeading("Próximos passos", 18);
         writeBody(ec.call_to_action);
       }
       if (bonus.length) {
         newPage();
+        toc.push({ label: "Bônus", page: doc.getNumberOfPages() });
         writeHeading("Bônus", 20);
-        bonus.forEach((b) => writeBody(`• ${b}`));
+        bonus.forEach((b) => writeParagraph(`• ${b}`));
       }
 
+      // ── Sumário (página 2) com links clicáveis ────────────────────────────
+      doc.setPage(tocPage);
+      let ty = margin + 6;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(24);
+      doc.setTextColor(pr, pg, pb);
+      doc.text("Sumário", margin, ty);
+      doc.setTextColor(0);
+      ty += 44;
+      doc.setFontSize(11.5);
+      for (const entry of toc) {
+        doc.setFont("helvetica", "normal");
+        const label = entry.label.length > 70 ? entry.label.slice(0, 69) + "…" : entry.label;
+        doc.text(label, margin, ty);
+        doc.text(String(entry.page - 1), pageW - margin, ty, { align: "right" });
+        // linha inteira clicável → página de destino
+        doc.link(margin, ty - 11, maxW, 15, { pageNumber: entry.page });
+        ty += 21;
+        if (ty > pageH - margin) break;
+      }
+
+      // ── Rodapé: numeração + autor em todas as páginas internas ───────────
       const total = doc.getNumberOfPages();
       for (let p = 2; p <= total; p++) {
         doc.setPage(p);
-        addPageNumber(p - 1);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(130);
+        if (author) doc.text(author, margin, pageH - 24);
+        doc.text(String(p - 1), pageW - margin, pageH - 24, { align: "right" });
+        doc.setTextColor(0);
       }
 
       const safe = (ec.title ?? title).replace(/[^\w\u00C0-\u017F\s-]/g, "").trim().slice(0, 60) || "ebook";
@@ -393,12 +483,21 @@ function EbookDetail() {
   return (
     <DashboardShell title={ebook.title}>
       <div className="mx-auto max-w-4xl space-y-5">
-        {status === "processing" && !renderable && (
+        {status === "processing" && (
           <div className="flex items-center gap-3 rounded-2xl border border-primary/40 bg-gradient-card p-4 shadow-elegant">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <div>
-              <div className="font-medium">Gerando seu ebook…</div>
-              <div className="text-xs text-muted-foreground">Isso leva ~30–60 segundos.</div>
+            <div className="flex-1">
+              <div className="font-medium">
+                {c.progress && c.progress.total > 0
+                  ? `Gerando capítulo ${Math.min(c.progress.done + 1, c.progress.total)} de ${c.progress.total}…`
+                  : "Planejando a estrutura do ebook…"}
+              </div>
+              <div className="text-xs text-muted-foreground">Geração capítulo a capítulo — o conteúdo aparece abaixo conforme fica pronto.</div>
+              {c.progress && c.progress.total > 0 && (
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round((c.progress.done / c.progress.total) * 100)}%` }} />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -413,6 +512,15 @@ function EbookDetail() {
         )}
 
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
+          <div className="flex gap-4">
+            {renderable && (
+              <img
+                src={svgDataUrl(coverSvg({ title: ec.title ?? title, subtitle: ec.subtitle, promise: ec.cover_promise, author: ec.autor, seed: ec.title ?? title }))}
+                alt="Capa do ebook"
+                className="hidden w-24 shrink-0 rounded-lg shadow-md sm:block"
+              />
+            )}
+            <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} className="max-w-md" />
             <Button onClick={save} disabled={busy === "save"} variant="secondary">
@@ -429,6 +537,8 @@ function EbookDetail() {
             </Button>
           </div>
           {ebook.niche && <p className="mt-3 text-xs text-muted-foreground">Nicho: {ebook.niche} · Status: {status}</p>}
+            </div>
+          </div>
         </div>
 
         {/* Mode toggle */}
@@ -498,11 +608,10 @@ function EbookDetail() {
                     </div>
                     {ch.title && (
                       <img
-                        src={chapterImageUrl(ch.title)}
+                        src={svgDataUrl(chapterBannerSvg({ index: i, title: ch.title, imageDescription: (ch as any).image_description, seed: ec.title ?? title }))}
                         alt={ch.title}
                         className="mb-3 w-full rounded-lg object-cover"
                         style={{ height: 160 }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                       />
                     )}
                     <Textarea
@@ -510,7 +619,15 @@ function EbookDetail() {
                       value={ch.content}
                       onChange={(e) => updateChapter(i, "content", e.target.value)}
                       className="text-sm"
-                      placeholder="Conteúdo do capítulo…"
+                      placeholder="Conteúdo do capítulo… (use ### para subtítulos de seção)"
+                    />
+                    <label className="mb-1 mt-2 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">⚡ Ação Prática (box ao final do capítulo)</label>
+                    <Textarea
+                      rows={2}
+                      value={(ch as any).acao_pratica ?? ""}
+                      onChange={(e) => updateChapter(i, "acao_pratica", e.target.value)}
+                      className="text-sm"
+                      placeholder="Passos acionáveis, um por linha…"
                     />
                   </div>
                 ))}

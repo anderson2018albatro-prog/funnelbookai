@@ -22,11 +22,12 @@ function NewEbook() {
     publico_alvo: "",
     promessa: "",
     problema: "",
+    autor: "",
     idioma: "Português",
     tom_voz: "Profissional e acessível",
     tamanho: "medio" as "curto" | "medio" | "completo" | "custom",
     paginas: 25,
-    capitulos: 5,
+    capitulos: 7,
     uso: "venda",
   });
 
@@ -106,6 +107,10 @@ function NewEbook() {
                 <Textarea id="problema" value={form.problema} onChange={(e) => setForm({ ...form, problema: e.target.value })} rows={2} placeholder="Ex.: Cansaço, metabolismo lento" />
               </div>
             </div>
+            <div>
+              <Label htmlFor="autor">Nome do autor (aparece na capa e no rodapé do PDF)</Label>
+              <Input id="autor" value={form.autor} onChange={(e) => setForm({ ...form, autor: e.target.value })} placeholder="Ex.: Ana Silva" />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="idioma">Idioma</Label>
@@ -161,13 +166,13 @@ function NewEbook() {
                 <Select value={String(form.capitulos)} onValueChange={(v) => setForm({ ...form, capitulos: Number(v) })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="3">3 capítulos (introdutório)</SelectItem>
-                    <SelectItem value="5">5 capítulos (padrão)</SelectItem>
-                    <SelectItem value="7">7 capítulos (completo)</SelectItem>
+                    <SelectItem value="7">7 capítulos (padrão)</SelectItem>
+                    <SelectItem value="8">8 capítulos</SelectItem>
                     <SelectItem value="10">10 capítulos (extenso)</SelectItem>
+                    <SelectItem value="12">12 capítulos (máximo)</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-xs text-muted-foreground">Cada capítulo terá conteúdo proporcional ao tamanho escolhido.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Estrutura profissional: problema → agitação → método → aplicação prática. Cada capítulo é gerado em chamada separada, com storytelling, seções, exemplo prático e box de Ação Prática.</p>
               </div>
             </div>
             <div>

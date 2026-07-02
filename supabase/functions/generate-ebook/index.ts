@@ -1,7 +1,10 @@
 // Edge Function: generate-ebook
 // Cria o registro do ebook em "processing", debita 1 crédito,
 // e processa a geração em background (EdgeRuntime.waitUntil) para não estourar timeout.
-// O frontend faz polling em ebooks.status.
+// Geração em 2 fases: (1) esqueleto profissional (título, capa, sumário, plano de
+// capítulos), (2) cada capítulo em chamada separada com retry e progresso parcial
+// salvo no Supabase — se uma chamada falhar, nada do que já foi gerado se perde.
+// O frontend faz polling em ebooks.status e ebooks.content.progress.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { chatCompletion } from "../_shared/ai.ts";
 import { jsonrepair } from "https://esm.sh/jsonrepair@3.6.1";
@@ -34,7 +37,6 @@ function stripFences(s: string) {
 
 // Sanitiza JSON vindo de LLMs: escapa caracteres de controle crus
 // dentro de strings e neutraliza barras invertidas inválidas.
-// Causa raiz do erro "Bad escaped character in JSON at position X".
 function sanitizeLlmJson(s: string): string {
   let out = "";
   let inStr = false;
@@ -42,7 +44,6 @@ function sanitizeLlmJson(s: string): string {
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (esc) {
-      // já validado abaixo; copia
       out += ch;
       esc = false;
       continue;
@@ -51,7 +52,6 @@ function sanitizeLlmJson(s: string): string {
       if (inStr) {
         const next = s[i + 1] ?? "";
         if (!'"\\/bfnrtu'.includes(next)) {
-          // escape inválido -> escapa a própria barra
           out += "\\\\";
           continue;
         }
@@ -87,105 +87,225 @@ function parseLoose(raw: string): any {
   try { return JSON.parse(jsonrepair(cleaned)); } catch (_) { /* continua */ }
   try { return JSON.parse(jsonrepair(sanitizeLlmJson(cleaned))); } catch (e) {
     const msg = (e as Error).message;
-    // mostra a janela ao redor da posição da falha para diagnóstico
     const pos = Number(msg.match(/position (\d+)/)?.[1] ?? -1);
     const ctx = pos >= 0 ? cleaned.slice(Math.max(0, pos - 80), pos + 80) : cleaned.slice(0, 200);
     throw new Error(`JSON inválido da IA após reparos: ${msg}. Contexto: …${ctx}…`);
   }
 }
 
-async function callAI(_lovableKey: string, prompt: string) {
-  const content = await chatCompletion([
-    { role: "system", content: "Você é um escritor profissional de ebooks. REGRA ABSOLUTA: responda APENAS com um objeto JSON válido. Nenhum texto antes, nenhum texto depois, nenhuma cerca de código (```). Dentro de strings JSON use \\n para quebrar linhas, nunca quebre linhas literais dentro de strings." },
-    { role: "user", content: prompt },
-  ], 8000);
-  if (!content) throw new Error("Resposta vazia da IA");
-  return parseLoose(content);
+const SYSTEM_JSON =
+  "Você é um escritor profissional de ebooks best-sellers. REGRA ABSOLUTA: responda APENAS com um objeto JSON válido. Nenhum texto antes, nenhum texto depois, nenhuma cerca de código (```). Dentro de strings JSON use \\n para quebrar linhas, nunca quebre linhas literais dentro de strings.";
+
+// Regras de qualidade de texto aplicadas a todas as chamadas
+function qualityRules(idioma: string): string {
+  return `QUALIDADE DO TEXTO (OBRIGATÓRIO):
+- Escreva em ${idioma || "Português brasileiro"} natural e fluido, tom conversacional — como quem explica para um amigo inteligente.
+- Frases curtas. Parágrafos de 2 a 4 frases. Nada de blocos gigantes de texto.
+- PROIBIDO usar clichês de IA como: "no mundo de hoje", "é importante ressaltar", "em resumo", "nos dias atuais", "cada vez mais", "não é segredo para ninguém", "vale destacar".
+- Use analogias do dia a dia e números/dados concretos quando fizer o texto mais convincente.
+- Exemplos práticos com contexto brasileiro (situações, nomes e realidades do Brasil) quando o idioma for português.`;
+}
+
+// Chamada com retry automático em caso de falha de parse/geração
+async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3): Promise<any> {
+  let lastErr: Error | null = null;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const content = await chatCompletion([
+        { role: "system", content: SYSTEM_JSON },
+        { role: "user", content: prompt },
+      ], maxTokens);
+      if (!content) throw new Error("Resposta vazia da IA");
+      return parseLoose(content);
+    } catch (e) {
+      lastErr = e as Error;
+      console.warn(`[generate-ebook] tentativa ${i + 1}/${tries} falhou: ${lastErr.message.slice(0, 200)}`);
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr ?? new Error("Falha na IA");
+}
+
+type OutlineChapter = { title: string; sections: string[]; image_description: string };
+type Outline = {
+  title: string;
+  subtitle: string;
+  cover_promise: string;
+  introduction: string;
+  chapters: OutlineChapter[];
+  conclusion: string;
+  call_to_action: string;
+  bonus: string[];
+};
+
+function outlinePrompt(briefing: any, chapters: number): string {
+  return `Planeje um ebook PROFISSIONAL no idioma "${briefing.idioma || "Português"}", tom "${briefing.tom_voz || "profissional e acessível"}".
+
+BRIEFING:
+- Tema/Nicho: ${briefing.tema}
+- Público-alvo: ${briefing.publico_alvo}
+- Promessa principal: ${briefing.promessa || "transformar a vida do leitor"}
+- Problema que resolve: ${briefing.problema || "dificuldades na área"}
+- Autor: ${briefing.autor || "(não informado)"}
+- Uso: ${briefing.uso || "venda"}
+- Número de capítulos: EXATAMENTE ${chapters}
+
+ESTRUTURA DO PLANO (progressão lógica obrigatória):
+Os capítulos devem seguir o arco: PROBLEMA (situação atual e dores) → AGITAÇÃO (por que continua dando errado) → MÉTODO (o caminho/solução passo a passo) → APLICAÇÃO PRÁTICA (implementação, casos, manutenção de resultados).
+
+${qualityRules(briefing.idioma)}
+
+CAMPOS:
+- title: título criativo e vendedor do ebook
+- subtitle: subtítulo que detalha a promessa
+- cover_promise: 1 frase curta de promessa forte para a capa (máx 14 palavras)
+- introduction: introdução com GANCHO EMOCIONAL — comece com uma cena, pergunta ou dor real do leitor; 3-4 parágrafos separados por \\n\\n; termine dizendo o que o leitor vai conquistar
+- chapters: EXATAMENTE ${chapters} objetos, cada um com:
+  - title: título específico e curioso do capítulo
+  - sections: 3 a 5 subtítulos das seções internas do capítulo
+  - image_description: descrição de 1 imagem ilustrativa para o capítulo (1 frase, ex: "Mulher sorrindo preparando refeição saudável na cozinha")
+- conclusion: 2-3 parágrafos amarrando a transformação prometida
+- call_to_action: 1 parágrafo persuasivo convidando para ${briefing.uso === "gratuito" ? "o próximo passo com o autor" : "conhecer a oferta do autor"}
+- bonus: 2 a 4 ideias de bônus acionáveis
+
+Retorne APENAS o JSON:
+{
+  "title": string,
+  "subtitle": string,
+  "cover_promise": string,
+  "introduction": string,
+  "chapters": [{ "title": string, "sections": string[], "image_description": string }],
+  "conclusion": string,
+  "call_to_action": string,
+  "bonus": string[]
+}`;
+}
+
+function chapterPrompt(briefing: any, outline: Outline, idx: number): string {
+  const ch = outline.chapters[idx];
+  const prevTitles = outline.chapters.slice(0, idx).map((c, i) => `${i + 1}. ${c.title}`).join("\n") || "(nenhum — é o primeiro)";
+  return `Escreva o capítulo ${idx + 1} do ebook "${outline.title}" (tema: ${briefing.tema}; público: ${briefing.publico_alvo}).
+
+CAPÍTULO ${idx + 1}: "${ch.title}"
+Seções planejadas (use exatamente estes subtítulos, nesta ordem):
+${ch.sections.map((s) => `- ${s}`).join("\n")}
+
+Capítulos anteriores (não repita conteúdo):
+${prevTitles}
+
+ESTRUTURA OBRIGATÓRIA do campo "content":
+1. Abra com um storytelling curto (1-2 parágrafos): uma mini-história, cena ou caso real que conecta com o tema do capítulo.
+2. Depois, cada seção: comece a seção com o subtítulo prefixado por "### " (ex: "### ${ch.sections[0] ?? "Subtítulo"}"), seguido de 2-4 parágrafos de conteúdo rico.
+3. Inclua pelo menos 1 exemplo prático brasileiro e dicas concretas para "${briefing.publico_alvo}".
+4. Total: 500 a 800 palavras. Parágrafos separados por \\n\\n.
+
+${qualityRules(briefing.idioma)}
+
+Retorne APENAS o JSON:
+{
+  "content": "storytelling de abertura\\n\\n### Primeiro subtítulo\\n\\nconteúdo...\\n\\n### Segundo subtítulo\\n\\nconteúdo...",
+  "acao_pratica": "Box 'Ação Prática': 3 a 5 passos acionáveis que o leitor executa hoje, um por linha separados por \\n"
+}`;
 }
 
 function mockEbookContent(briefing: any): any {
   const tema = briefing.tema || "Desenvolvimento Pessoal";
-  const n = typeof briefing.capitulos === "number" ? Math.min(15, Math.max(3, briefing.capitulos)) : 5;
+  const n = Math.min(12, Math.max(7, Number(briefing.capitulos) || 7));
+  const titles = ["Fundamentos Essenciais","O Que Ninguém Te Contou","O Método Passo a Passo","Colocando em Prática","Superando Obstáculos","Acelerando Resultados","Mantendo a Consistência","Ferramentas e Recursos","Cases de Sucesso","Erros que Custam Caro","Escalando os Resultados","Seu Plano de 90 Dias"];
   const chapters = Array.from({ length: n }, (_, i) => ({
-    title: `Capítulo ${i + 1}: ${["Fundamentos Essenciais","Estratégias Avançadas","Implementação Prática","Superando Obstáculos","Resultados e Próximos Passos","Mindset de Crescimento","Ferramentas e Recursos","Cases de Sucesso","Erros Comuns","Aceleração de Resultados","Sustentabilidade","Comunidade e Suporte","Automação","Escalabilidade","Legado"][i] || `Módulo ${i + 1}`}`,
-    content: `Este capítulo aborda aspectos fundamentais de ${tema}.\n\nConteúdo completo será gerado pela IA quando você usar o modo real. Este é apenas um conteúdo de demonstração para testar o fluxo sem gastar créditos de IA.\n\nO texto real terá entre 400 e 600 palavras com exemplos práticos, estratégias aplicáveis e referências relevantes para o público de ${briefing.publico_alvo || "este ebook"}.`,
+    title: `${titles[i] || `Módulo ${i + 1}`}`,
+    content: `Era uma terça-feira comum quando Ana percebeu que precisava mudar sua relação com ${tema}.\n\n### Por onde começar\n\nEste capítulo aborda aspectos fundamentais de ${tema}. Conteúdo completo será gerado pela IA no modo real.\n\n### O que evitar\n\nEste é apenas um conteúdo de demonstração para testar o fluxo sem gastar créditos de IA.`,
+    acao_pratica: `1. Anote seu objetivo principal\n2. Separe 15 minutos por dia\n3. Aplique a primeira técnica hoje`,
+    image_description: `Ilustração sobre ${tema}`,
   }));
   return {
     title: `${tema}: O Guia Definitivo`,
     subtitle: `Tudo que você precisa saber para transformar sua vida com ${tema}`,
-    introduction: `Bem-vindo ao guia definitivo sobre ${tema}. Este ebook foi criado especialmente para ${briefing.publico_alvo || "você"}.\n\nNeste material você vai encontrar estratégias práticas, exemplos reais e um passo a passo completo para alcançar ${briefing.promessa || "seus objetivos"}.\n\n[MODO MOCK — conteúdo real gerado pela IA no modo normal]`,
+    cover_promise: `O caminho comprovado para dominar ${tema}`,
+    autor: briefing.autor || "",
+    introduction: `Imagine acordar daqui a 90 dias com ${briefing.promessa || "seus objetivos"} realizados.\n\nEste ebook foi criado especialmente para ${briefing.publico_alvo || "você"}.\n\n[MODO MOCK — conteúdo real gerado pela IA no modo normal]`,
     summary: chapters.map((c) => c.title),
     chapters,
-    conclusion: `Chegamos ao final desta jornada sobre ${tema}. Você agora tem todas as ferramentas necessárias para dar o próximo passo e transformar sua realidade.\n\n[MODO MOCK — conteúdo real gerado pela IA no modo normal]`,
+    conclusion: `Chegamos ao final desta jornada sobre ${tema}. Você agora tem todas as ferramentas necessárias para dar o próximo passo.\n\n[MODO MOCK — conteúdo real gerado pela IA no modo normal]`,
     call_to_action: `Não deixe para depois! Comece hoje mesmo a aplicar o que aprendeu. Seu sucesso começa com uma ação.`,
     bonus: ["Checklist de implementação rápida", "Planilha de acompanhamento de resultados", "Acesso à comunidade exclusiva"],
+    progress: { done: n, total: n },
   };
 }
 
 async function processInBackground(opts: {
   admin: ReturnType<typeof createClient>;
-  lovableKey: string;
   ebookId: string;
   userId: string;
   briefing: any;
 }) {
-  const { admin, lovableKey, ebookId, userId, briefing } = opts;
+  const { admin, ebookId, userId, briefing } = opts;
   try {
-    // 4 capítulos máx para o budget de tokens (8000 tokens de saída ≈ 75s no gpt-4o-mini)
-    const chapters = Math.min(4, Math.max(3, Number(briefing.capitulos) || 4));
+    // 7 a 12 capítulos (estrutura profissional)
+    const chapters = Math.min(12, Math.max(7, Number(briefing.capitulos) || Math.round((Number(briefing.paginas) || 28) / 4)));
 
-    const prompt = `Crie um ebook PROFISSIONAL E COMPLETO no idioma "${briefing.idioma || "Português"}", com tom "${briefing.tom_voz || "profissional e acessível"}".
-
-BRIEFING DO EBOOK:
-- Tema/Nicho: ${briefing.tema}
-- Público-alvo: ${briefing.publico_alvo}
-- Promessa principal: ${briefing.promessa || "transformar a vida do leitor"}
-- Problema que resolve: ${briefing.problema || "dificuldades na área"}
-- Número de capítulos: EXATAMENTE ${chapters}
-- Uso: ${briefing.uso || "venda"}
-
-PADRÃO DE QUALIDADE — cada capítulo deve ter:
-• Introdução do tema do capítulo (1 parágrafo)
-• 2-3 conceitos principais com explicação detalhada
-• Pelo menos 1 exemplo prático real e aplicável
-• Dicas concretas e acionáveis para o público "${briefing.publico_alvo}"
-• Mini-resumo ou próximo passo ao final
-• Entre 400 e 550 palavras por capítulo — NÃO ultrapasse 550 (texto longo demais corta o final do ebook)
-
-REGRAS TÉCNICAS ABSOLUTAS:
-1. Retorne APENAS o JSON. Sem texto antes. Sem texto depois. Sem cercas de código.
-2. Use \\n\\n para separar parágrafos dentro de strings. NUNCA quebras de linha literais.
-3. Escape aspas dentro de strings como \\".
-4. O array "chapters" deve ter EXATAMENTE ${chapters} objetos.
-5. Preencha TODOS os campos do schema, incluindo "conclusion", "call_to_action" e "bonus" no final. Seja conciso nos capítulos para garantir que o JSON termine completo.
-
-SCHEMA (preencha todos os campos com conteúdo rico e específico):
-{
-  "title": "Título criativo e atraente do ebook",
-  "subtitle": "Subtítulo que complementa e detalha a promessa",
-  "introduction": "Introdução motivacional de 2-3 parágrafos separados por \\n\\n explicando o problema, a solução e o que o leitor vai conquistar",
-  "summary": ["Título Capítulo 1", "Título Capítulo 2"],
-  "chapters": [
-    {
-      "title": "Título específico do capítulo",
-      "content": "Conteúdo rico de 400-550 palavras com conceitos, exemplos e dicas. Parágrafos separados por \\n\\n."
+    console.log("[generate-ebook] fase 1: esqueleto", ebookId, `${chapters} capítulos`);
+    const outline: Outline = await callAIWithRetry(outlinePrompt(briefing, chapters), 4000);
+    if (!Array.isArray(outline.chapters) || outline.chapters.length === 0) {
+      throw new Error("Esqueleto inválido: sem capítulos");
     }
-  ],
-  "conclusion": "Conclusão inspiradora de 2 parágrafos que recapitula os principais aprendizados e incentiva a ação",
-  "call_to_action": "Chamada para ação clara e motivadora",
-  "bonus": ["Bônus prático 1", "Bônus prático 2", "Bônus prático 3"]
-}`;
+    // Normaliza a quantidade planejada
+    outline.chapters = outline.chapters.slice(0, chapters);
 
-    console.log("[generate-ebook] iniciando IA", ebookId, `${chapters} capítulos`);
-    const ebookData = await callAI(lovableKey, prompt);
+    // Salva o esqueleto imediatamente (progresso parcial)
+    const baseContent: any = {
+      title: outline.title,
+      subtitle: outline.subtitle,
+      cover_promise: outline.cover_promise ?? "",
+      autor: briefing.autor || "",
+      introduction: outline.introduction,
+      summary: outline.chapters.map((c) => c.title),
+      chapters: [] as any[],
+      conclusion: outline.conclusion,
+      call_to_action: outline.call_to_action,
+      bonus: outline.bonus ?? [],
+      briefing,
+      progress: { done: 0, total: outline.chapters.length },
+    };
+    await admin.from("ebooks").update({
+      title: outline.title ?? "Ebook sem título",
+      content: baseContent,
+    }).eq("id", ebookId);
+
+    // Fase 2: capítulo por capítulo, com retry e progresso salvo a cada capítulo
+    const failed: number[] = [];
+    for (let i = 0; i < outline.chapters.length; i++) {
+      const plan = outline.chapters[i];
+      try {
+        console.log(`[generate-ebook] fase 2: capítulo ${i + 1}/${outline.chapters.length}`, ebookId);
+        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 2200);
+        baseContent.chapters.push({
+          title: plan.title,
+          content: String(ch.content ?? ""),
+          acao_pratica: String(ch.acao_pratica ?? ""),
+          image_description: plan.image_description ?? "",
+        });
+      } catch (e) {
+        console.error(`[generate-ebook] capítulo ${i + 1} falhou definitivamente:`, (e as Error).message);
+        failed.push(i + 1);
+        baseContent.chapters.push({
+          title: plan.title,
+          content: `[Falha ao gerar este capítulo automaticamente. Edite manualmente ou tente regenerar.]\n\n${plan.sections.map((s) => `### ${s}\n\n`).join("")}`,
+          acao_pratica: "",
+          image_description: plan.image_description ?? "",
+        });
+      }
+      baseContent.progress = { done: i + 1, total: outline.chapters.length };
+      // Salva progresso parcial — nada se perde se a próxima chamada falhar
+      await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+    }
 
     const { error: updErr } = await admin
       .from("ebooks")
       .update({
-        title: ebookData.title ?? "Ebook sem título",
-        content: { ...ebookData, briefing },
+        content: baseContent,
         status: "completed",
-        error_message: null,
+        error_message: failed.length ? `Capítulos com falha: ${failed.join(", ")} (conteúdo placeholder inserido)` : null,
       })
       .eq("id", ebookId);
     if (updErr) throw new Error(updErr.message);
@@ -217,12 +337,13 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY não configurada" }, 500);
-    if (!lovableKey && !geminiKey && !openaiKey) {
-      return json({ error: "Configure GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    if (!anthropicKey && !lovableKey && !geminiKey && !openaiKey) {
+      return json({ error: "Configure ANTHROPIC_API_KEY, GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
@@ -236,13 +357,14 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const testMode = body.test_mode === true;
-    const paginas = Math.min(Math.max(Number(body.paginas) || Number(body.capitulos) * 4 || 25, 8), 50);
-    const capitulos = Number(body.capitulos) || 5;
+    const paginas = Math.min(Math.max(Number(body.paginas) || Number(body.capitulos) * 4 || 28, 8), 60);
+    const capitulos = Number(body.capitulos) || 7;
     const briefing = {
       tema: body.tema || (testMode ? "Marketing Digital para Iniciantes" : undefined),
       publico_alvo: body.publico_alvo || (testMode ? "Empreendedores iniciantes" : undefined),
       promessa: body.promessa ?? "",
       problema: body.problema ?? "",
+      autor: String(body.autor ?? ""),
       idioma: body.idioma ?? "Português",
       tom_voz: body.tom_voz ?? "Profissional e acessível",
       paginas,
@@ -298,7 +420,7 @@ Deno.serve(async (req) => {
     // Dispara processamento em background
     // @ts-ignore EdgeRuntime existe em Supabase Edge Functions
     EdgeRuntime.waitUntil(
-      processInBackground({ admin, lovableKey: lovableKey ?? "", ebookId: ebook.id, userId, briefing })
+      processInBackground({ admin, ebookId: ebook.id, userId, briefing })
     );
 
     return json({ ebookId: ebook.id, status: "processing" }, 202);
