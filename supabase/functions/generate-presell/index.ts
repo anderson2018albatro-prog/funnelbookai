@@ -72,23 +72,23 @@ function isValidUrl(u: string) {
 
 function defaultOrderFor(type: string): string[] {
   switch (type) {
-    case "advertorial": return ["topbar","headline","media","story","what_is","how_it_works","benefits","proof","cta","faq"];
-    case "quiz": return ["topbar","headline","quiz","cta"];
-    case "comparativo": return ["topbar","headline","comparison","benefits","cta","faq"];
-    case "bridge": return ["topbar","headline","benefits","cookie_notice","cta"];
-    case "vsl": return ["topbar","headline","video","benefits","cta","faq"];
+    case "advertorial": return ["urgency_bar","topbar","headline","author_byline","media","story","what_is","how_it_works","benefits","proof","testimonials","trust_badges","cta","faq","comments"];
+    case "quiz": return ["urgency_bar","topbar","headline","viewers_counter","quiz","testimonials","trust_badges","cta"];
+    case "comparativo": return ["urgency_bar","topbar","headline","viewers_counter","comparison","benefits","testimonials","trust_badges","cta","faq"];
+    case "bridge": return ["topbar","headline","benefits","testimonials","cookie_notice","cta"];
+    case "vsl": return ["urgency_bar","topbar","headline","viewers_counter","video","benefits","testimonials","trust_badges","cta","faq"];
     case "cookie_notice": return ["topbar","headline","cookie_notice","cta"];
-    case "native_ad": return ["topbar","headline","media","intro","story","what_is","benefits","proof","cta","faq"];
-    case "story": return ["topbar","headline","story","what_is","how_it_works","benefits","pros","trust_badges","cta","faq"];
-    case "listicle": return ["topbar","headline","media","intro","benefits","pros","proof","trust_badges","cta","faq"];
+    case "native_ad": return ["topbar","headline","author_byline","media","intro","story","what_is","benefits","proof","testimonials","cta","faq","comments"];
+    case "story": return ["urgency_bar","topbar","headline","story","what_is","how_it_works","benefits","pros","testimonials","trust_badges","cta","faq","comments"];
+    case "listicle": return ["urgency_bar","topbar","headline","media","intro","benefits","pros","proof","testimonials","trust_badges","cta","faq"];
     case "age_gate":
     case "gender_gate":
     case "country_gate":
     case "captcha_gate":
       return ["topbar","headline","cta"];
-    case "coupon": return ["topbar","headline","coupon_widget","benefits","cta"];
-    case "countdown": return ["topbar","headline","countdown_timer","benefits","trust_badges","cta"];
-    default: return ["topbar","headline","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","trust_badges","cta","faq"];
+    case "coupon": return ["urgency_bar","topbar","headline","viewers_counter","coupon_widget","benefits","testimonials","cta"];
+    case "countdown": return ["urgency_bar","topbar","headline","viewers_counter","countdown_timer","benefits","trust_badges","testimonials","cta"];
+    default: return ["urgency_bar","topbar","headline","viewers_counter","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","testimonials","trust_badges","cta","faq","comments"];
   }
 }
 
@@ -195,15 +195,23 @@ async function fetchSource(url: string): Promise<{ ok: true; data: Extracted } |
   } catch (e) { return { ok: false, reason: (e as Error).message }; }
 }
 
-function buildBlocks(p: any, type: string, affUrl: string, productImage: string, disclosure: string, siteTheme?: { primary: string; accent: string }, waPhone = "", waMessage = "") {
+function buildBlocks(
+  p: any, type: string, affUrl: string, productImage: string, disclosure: string,
+  siteTheme?: { primary: string; accent: string }, waPhone = "", waMessage = "",
+  pixels: { facebook: string; google: string } = { facebook: "", google: "" },
+  ctaDelay = 0,
+) {
   const theme = siteTheme
     ? { primary: siteTheme.primary, accent: siteTheme.accent, bg: "#ffffff", text: "#0f172a" }
     : { ...DEFAULT_THEME };
+  const isGate = GATE_TYPES.includes(type);
+  const today = new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
   return {
     type, affiliate_url: affUrl,
     order: defaultOrderFor(type),
     disclosure_text: disclosure,
     theme,
+    pixels,
     data: {
       topbar: { visible: true, text: p.topbar || "Análise independente" },
       headline: { visible: true, title: p.headline ?? "", subtitle: p.subheadline ?? "" },
@@ -244,6 +252,7 @@ function buildBlocks(p: any, type: string, affUrl: string, productImage: string,
         text: p.cta_text ?? "Acessar site oficial",
         note: p.cta_note ?? "Você será redirecionado para o site oficial do produto.",
         sticky: !GATE_TYPES.includes(type),
+        reveal_after_seconds: type === "vsl" ? ctaDelay : 0,
       },
       faq: { visible: (p.faq ?? []).length > 0, title: "Perguntas frequentes", items: p.faq ?? [] },
       countdown_timer: {
@@ -262,6 +271,36 @@ function buildBlocks(p: any, type: string, affUrl: string, productImage: string,
         phone: waPhone,
         message: waMessage || "Olá! Tenho interesse neste produto.",
         color: "#25d366",
+      },
+      urgency_bar: {
+        visible: !isGate && !!p.urgency_bar,
+        text: p.urgency_bar ?? "🔥 Atenção: condição especial disponível por tempo limitado",
+      },
+      viewers_counter: {
+        visible: !isGate && !["cookie_notice", "bridge"].includes(type),
+        min: 34, max: 97,
+      },
+      testimonials: {
+        visible: (p.testimonials ?? []).length > 0,
+        title: "O que estão dizendo",
+        items: (p.testimonials ?? []).map((t: any) => ({
+          name: String(t?.name ?? ""), text: String(t?.text ?? ""),
+          stars: Math.min(5, Math.max(3, Number(t?.stars) || 5)),
+        })),
+      },
+      comments: {
+        visible: (p.comments ?? []).length > 0,
+        title: "Comentários",
+        items: (p.comments ?? []).map((c: any) => ({
+          name: String(c?.name ?? ""), text: String(c?.text ?? ""),
+          likes: Math.max(0, Number(c?.likes) || 0), time: String(c?.time ?? ""),
+        })),
+      },
+      author_byline: {
+        visible: ["advertorial", "native_ad"].includes(type),
+        name: p.author_name ?? "Redação",
+        role: p.author_role ?? "Equipe editorial",
+        date: today,
       },
     },
   };
@@ -343,10 +382,12 @@ async function processBg(opts: {
   niche: string; target_audience: string; tone: string; language: string;
   extra_prompt: string; manual_info: string;
   whatsapp_phone: string; whatsapp_message: string;
+  pixels: { facebook: string; google: string };
+  cta_delay: number;
 }) {
   const { admin, presellId, source_url, affiliate_url, presell_type,
     niche, target_audience, tone, extra_prompt, manual_info,
-    whatsapp_phone, whatsapp_message } = opts;
+    whatsapp_phone, whatsapp_message, pixels, cta_delay } = opts;
   let language = opts.language;
   try {
     const fetched = source_url ? await fetchSource(source_url) : { ok: false as const, reason: "Sem URL" };
@@ -409,7 +450,7 @@ Comando extra: ${extra_prompt || "(nenhum)"}`;
       const guidance = typeGuidance[presell_type] ?? typeGuidance.review;
 
       raw = await chatCompletion([
-        { role: "system", content: "Você é um copywriter de alta conversão especializado em presells éticas para afiliados. Escreva conteúdo ORIGINAL, rico e persuasivo. Use parágrafos separados por \\n\\n nos campos de texto longo. NUNCA copie literalmente textos da página oficial. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
+        { role: "system", content: "Você é um copywriter de alta conversão especializado em presells éticas para afiliados brasileiros. REGRA DE OURO DA PRESELL: NUNCA venda direto — aqueça o leitor, crie desejo e curiosidade, e faça o clique para a página do produtor parecer decisão do próprio leitor. Escreva conteúdo ORIGINAL, rico e persuasivo. Use parágrafos separados por \\n\\n nos campos de texto longo. NUNCA copie literalmente textos da página oficial. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
         { role: "user", content: `Crie uma presell profissional (tipo "${presell_type}") com base no contexto abaixo.
 
 INSTRUÇÕES ESPECÍFICAS:
@@ -423,7 +464,7 @@ Idioma: ${language || "pt-BR"}
 ${ctx}
 
 REGRAS DE QUALIDADE:
-- headline: mínimo 8 palavras, desperta curiosidade
+- headline: mínimo 8 palavras, desperta curiosidade (não vende — gera vontade de ler)
 - subheadline: mínimo 10 palavras, detalha benefício
 - intro: 2 parágrafos ricos separados por \\n\\n (mínimo 80 palavras)
 - what_is: 2-3 parágrafos (mínimo 100 palavras)
@@ -432,6 +473,12 @@ REGRAS DE QUALIDADE:
 - pros: mínimo 3 itens
 - cons: 1-2 itens honestos
 - faq: mínimo 4 pares q/a
+- testimonials: EXATAMENTE 3 depoimentos coerentes com o nicho, nomes brasileiros comuns (serão exibidos com aviso de conteúdo ilustrativo)
+- comments: 4 a 6 comentários curtos estilo rede social, nomes brasileiros, tom espontâneo (com pequenas variações de escrita), likes entre 2 e 40, time tipo "2 h", "5 h", "1 d"
+- urgency_bar: frase curta de urgência ética para a barra do topo (sem prazos falsos)
+- author_name/author_role: autor fictício GENÉRICO para matéria (ex: "Carla M.", "Redação Saúde em Foco") — nunca use nome de pessoa real
+${presell_type === "quiz" ? `- quiz: 3 a 5 perguntas de segmentação/engajamento com 3-4 opções cada (toda opção leva adiante) + result: recomendação final que aponta o produto como solução` : ""}
+${presell_type === "comparativo" ? `- comparison: 5 a 8 linhas comparando o produto vs alternativa genérica, com winner destacado` : ""}
 - Dentro de strings use \\n para quebra de linha (nunca newline literal)
 
 Retorne APENAS o JSON:
@@ -452,16 +499,21 @@ Retorne APENAS o JSON:
  "how_it_works": string,
  "proof": string[],
  "trust_badges": string[],
- "comparison": null,
- "quiz": null,
+ "comparison": ${presell_type === "comparativo" ? `{"product_a": string, "product_b": string, "rows": [{"feature": string, "a": string, "b": string}], "winner": string}` : "null"},
+ "quiz": ${presell_type === "quiz" ? `{"title": string, "questions": [{"question": string, "options": string[]}], "result": string}` : "null"},
  "video_title": string,
  "video_url": "",
  "cookie_notice": string,
  "cta_text": string,
  "cta_note": string,
- "faq": [{"q":string,"a":string}]
+ "faq": [{"q":string,"a":string}],
+ "testimonials": [{"name": string, "text": string, "stars": number}],
+ "comments": [{"name": string, "text": string, "likes": number, "time": string}],
+ "urgency_bar": string,
+ "author_name": string,
+ "author_role": string
 }` },
-      ], 3500);
+      ], 4500);
     }
 
     if (!raw) throw new Error("Resposta vazia da IA");
@@ -472,7 +524,7 @@ Retorne APENAS o JSON:
       ? { primary: info.brand_color, accent: info.brand_color }
       : undefined;
 
-    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE, siteTheme, whatsapp_phone, whatsapp_message);
+    const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE, siteTheme, whatsapp_phone, whatsapp_message, pixels, cta_delay);
     const title = p.headline || info?.og_title || info?.title || "Presell";
 
     const { error } = await admin.from("presells").update({
@@ -518,6 +570,11 @@ Deno.serve(async (req) => {
       extra_prompt = "", manual_info = "" } = body;
     const whatsapp_phone = String(body.whatsapp_phone ?? "").replace(/\D/g, "");
     const whatsapp_message = String(body.whatsapp_message ?? "");
+    const pixels = {
+      facebook: String(body.fb_pixel_id ?? "").replace(/[^A-Za-z0-9_-]/g, ""),
+      google: String(body.google_tag_id ?? "").replace(/[^A-Za-z0-9_-]/g, ""),
+    };
+    const cta_delay = Math.min(600, Math.max(0, Number(body.cta_delay_seconds) || 0));
 
     if (testMode) {
       affiliate_url = String(affiliate_url || "https://exemplo.com/afiliado").trim();
@@ -564,8 +621,40 @@ Deno.serve(async (req) => {
         discount_pct: "20% de desconto",
         countdown_minutes: 15,
         urgency_message: "⏰ Oferta por tempo limitado!",
+        urgency_bar: "🔥 Atenção: condição especial disponível hoje",
+        testimonials: [
+          { name: "Mariana L.", text: "Comecei sem esperar muito e me surpreendi com o resultado.", stars: 5 },
+          { name: "Rafael S.", text: "Valeu cada centavo. O suporte respondeu rápido.", stars: 5 },
+          { name: "Juliana P.", text: "Achei o método simples de seguir no dia a dia.", stars: 4 },
+        ],
+        comments: [
+          { name: "Camila Rodrigues", text: "Alguém já testou? To quase pedindo", likes: 12, time: "2 h" },
+          { name: "Pedro Henrique", text: "comprei semana passada, chegou certinho", likes: 8, time: "5 h" },
+          { name: "Fernanda Alves", text: "O desconto ainda tá valendo?", likes: 3, time: "1 d" },
+          { name: "Lucas M.", text: "Recomendo, só compra no site oficial pra ter garantia", likes: 21, time: "1 d" },
+        ],
+        author_name: "Redação",
+        author_role: "Equipe editorial",
+        quiz: presell_type === "quiz" ? {
+          title: "Descubra a melhor opção para você",
+          questions: [
+            { question: "Qual é o seu maior objetivo hoje?", options: ["Resultados rápidos", "Resultado duradouro", "Só estou pesquisando"] },
+            { question: "Você já tentou outras soluções?", options: ["Sim, várias", "Uma ou duas", "Nunca tentei"] },
+            { question: "Quanto tempo por dia você teria disponível?", options: ["Menos de 15 min", "30 min", "1 hora ou mais"] },
+          ],
+          result: "Com base nas suas respostas, a solução mais indicada para o seu perfil é a oficial abaixo.",
+        } : null,
+        comparison: presell_type === "comparativo" ? {
+          product_a: "Produto Oficial", product_b: "Alternativa genérica",
+          rows: [
+            { feature: "Garantia", a: "30 dias", b: "Sem garantia" },
+            { feature: "Suporte", a: "Oficial", b: "Inexistente" },
+            { feature: "Preço", a: "Promocional", b: "Variável" },
+          ],
+          winner: "Produto Oficial",
+        } : null,
       };
-      const blocks = buildBlocks(mockP, presell_type, affiliate_url, "", DEFAULT_DISCLOSURE);
+      const blocks = buildBlocks(mockP, presell_type, affiliate_url, "", DEFAULT_DISCLOSURE, undefined, whatsapp_phone, whatsapp_message, pixels, cta_delay);
       const title = mockP.headline;
       const { data: created, error: insErr } = await admin.from("presells").insert({
         user_id: userId, title, slug, source_url, affiliate_url, presell_type, tone, language,
@@ -587,7 +676,7 @@ Deno.serve(async (req) => {
     EdgeRuntime.waitUntil(processBg({
       admin, presellId: created.id,
       source_url, affiliate_url, presell_type, niche, target_audience, tone, language,
-      extra_prompt, manual_info, whatsapp_phone, whatsapp_message,
+      extra_prompt, manual_info, whatsapp_phone, whatsapp_message, pixels, cta_delay,
     }));
 
     return json({ presellId: created.id, slug, status: "processing" }, 202);

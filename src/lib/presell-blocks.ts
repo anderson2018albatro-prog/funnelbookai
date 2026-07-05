@@ -11,7 +11,8 @@ export type PresellBlockKey =
   | "topbar" | "headline" | "rating" | "media" | "intro" | "what_is" | "for_whom"
   | "benefits" | "pros" | "cons" | "story" | "how_it_works" | "proof" | "trust_badges"
   | "comparison" | "quiz" | "video" | "cookie_notice" | "cta" | "faq"
-  | "countdown_timer" | "coupon_widget" | "whatsapp_button";
+  | "countdown_timer" | "coupon_widget" | "whatsapp_button"
+  | "urgency_bar" | "viewers_counter" | "testimonials" | "comments" | "author_byline";
 
 export type PresellTheme = {
   primary: string;
@@ -20,12 +21,18 @@ export type PresellTheme = {
   text: string;
 };
 
+export type PresellPixels = {
+  facebook: string; // Facebook Pixel ID (instalação padrão)
+  google: string;   // Google tag ID (gtag, instalação padrão)
+};
+
 export type PresellBlocks = {
   type: PresellType;
   order: PresellBlockKey[];
   affiliate_url: string;
   disclosure_text: string;
   theme: PresellTheme;
+  pixels?: PresellPixels;
   data: {
     topbar: { visible: boolean; text: string };
     headline: { visible: boolean; title: string; subtitle: string };
@@ -54,11 +61,16 @@ export type PresellBlocks = {
     };
     video: { visible: boolean; title: string; video_url: string };
     cookie_notice: { visible: boolean; text: string };
-    cta: { visible: boolean; text: string; note: string; sticky: boolean };
+    cta: { visible: boolean; text: string; note: string; sticky: boolean; reveal_after_seconds?: number };
     faq: { visible: boolean; title: string; items: { q: string; a: string }[] };
     countdown_timer: { visible: boolean; minutes: number; message: string };
     coupon_widget: { visible: boolean; code: string; discount_pct: string; expires_minutes: number };
     whatsapp_button: { visible: boolean; phone: string; message: string; color: string };
+    urgency_bar: { visible: boolean; text: string };
+    viewers_counter: { visible: boolean; min: number; max: number };
+    testimonials: { visible: boolean; title: string; items: { name: string; text: string; stars: number }[] };
+    comments: { visible: boolean; title: string; items: { name: string; text: string; likes: number; time: string }[] };
+    author_byline: { visible: boolean; name: string; role: string; date: string };
   };
 };
 
@@ -86,6 +98,11 @@ export const PRESELL_LABELS: Record<PresellBlockKey, string> = {
   countdown_timer: "Timer de urgência",
   coupon_widget: "Cupom de desconto",
   whatsapp_button: "Botão WhatsApp flutuante",
+  urgency_bar: "Barra de urgência (topo)",
+  viewers_counter: "Contador de pessoas vendo",
+  testimonials: "Depoimentos (prova social)",
+  comments: "Comentários (estilo rede social)",
+  author_byline: "Autor / data (matéria)",
 };
 
 export const PRESELL_TYPE_LABELS: Record<PresellType, string> = {
@@ -127,34 +144,34 @@ const GATE_TYPES: PresellType[] = ["age_gate", "gender_gate", "country_gate", "c
 export function defaultOrderFor(type: PresellType): PresellBlockKey[] {
   switch (type) {
     case "review":
-      return ["topbar","headline","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","trust_badges","cta","faq"];
+      return ["urgency_bar","topbar","headline","viewers_counter","rating","media","intro","what_is","how_it_works","benefits","pros","cons","for_whom","testimonials","trust_badges","cta","faq","comments"];
     case "advertorial":
-      return ["topbar","headline","media","story","what_is","how_it_works","benefits","proof","cta","faq"];
+      return ["urgency_bar","topbar","headline","author_byline","media","story","what_is","how_it_works","benefits","proof","testimonials","trust_badges","cta","faq","comments"];
     case "quiz":
-      return ["topbar","headline","quiz","cta"];
+      return ["urgency_bar","topbar","headline","viewers_counter","quiz","testimonials","trust_badges","cta"];
     case "comparativo":
-      return ["topbar","headline","comparison","benefits","cta","faq"];
+      return ["urgency_bar","topbar","headline","viewers_counter","comparison","benefits","testimonials","trust_badges","cta","faq"];
     case "bridge":
-      return ["topbar","headline","benefits","cookie_notice","cta"];
+      return ["topbar","headline","benefits","testimonials","cookie_notice","cta"];
     case "vsl":
-      return ["topbar","headline","video","benefits","cta","faq"];
+      return ["urgency_bar","topbar","headline","viewers_counter","video","benefits","testimonials","trust_badges","cta","faq"];
     case "cookie_notice":
       return ["topbar","headline","cookie_notice","cta"];
     case "native_ad":
-      return ["topbar","headline","media","intro","story","what_is","benefits","proof","cta","faq"];
+      return ["topbar","headline","author_byline","media","intro","story","what_is","benefits","proof","testimonials","cta","faq","comments"];
     case "story":
-      return ["topbar","headline","story","what_is","how_it_works","benefits","pros","trust_badges","cta","faq"];
+      return ["urgency_bar","topbar","headline","story","what_is","how_it_works","benefits","pros","testimonials","trust_badges","cta","faq","comments"];
     case "listicle":
-      return ["topbar","headline","media","intro","benefits","pros","proof","trust_badges","cta","faq"];
+      return ["urgency_bar","topbar","headline","media","intro","benefits","pros","proof","testimonials","trust_badges","cta","faq"];
     case "age_gate":
     case "gender_gate":
     case "country_gate":
     case "captcha_gate":
       return ["topbar","headline","cta"];
     case "coupon":
-      return ["topbar","headline","coupon_widget","benefits","cta"];
+      return ["urgency_bar","topbar","headline","viewers_counter","coupon_widget","benefits","testimonials","cta"];
     case "countdown":
-      return ["topbar","headline","countdown_timer","benefits","trust_badges","cta"];
+      return ["urgency_bar","topbar","headline","viewers_counter","countdown_timer","benefits","trust_badges","testimonials","cta"];
   }
 }
 
@@ -187,13 +204,68 @@ export function emptyPresell(type: PresellType, affiliateUrl: string): PresellBl
         visible: true,
         text: "Ao clicar no botão você será redirecionado para o site oficial do produto. Nenhum cookie é definido antes do seu clique.",
       },
-      cta: { visible: true, text: "Acessar site oficial", note: "Você será redirecionado para o site oficial do produto.", sticky: true },
+      cta: { visible: true, text: "Acessar site oficial", note: "Você será redirecionado para o site oficial do produto.", sticky: true, reveal_after_seconds: 0 },
       faq: { visible: true, title: "Perguntas frequentes", items: [] },
       countdown_timer: { visible: type === "countdown", minutes: 15, message: "⏰ Oferta por tempo limitado!" },
       coupon_widget: { visible: type === "coupon", code: "PROMO10", discount_pct: "10% de desconto", expires_minutes: 20 },
       whatsapp_button: { visible: false, phone: "", message: "Olá! Tenho interesse neste produto.", color: "#25d366" },
+      urgency_bar: { visible: false, text: "🔥 Atenção: condição especial disponível por tempo limitado" },
+      viewers_counter: { visible: false, min: 34, max: 97 },
+      testimonials: { visible: false, title: "O que estão dizendo", items: [] },
+      comments: { visible: false, title: "Comentários", items: [] },
+      author_byline: { visible: false, name: "Redação", role: "Equipe editorial", date: "" },
     },
   };
+}
+
+/** Presell de exemplo por formato — usada no preview da tela de criação. */
+export function samplePresell(type: PresellType): PresellBlocks {
+  const b = emptyPresell(type, "#exemplo");
+  const d = b.data;
+  d.headline.title = "Exemplo: [Produto] vale a pena? Veja isto antes de comprar";
+  d.headline.subtitle = "Analisamos a fundo para você decidir com segurança (conteúdo real gerado pela IA)";
+  d.intro.text = "Este é um preview de exemplo do formato.\n\nO conteúdo real é escrito pela IA com base no seu produto, nicho e público.";
+  d.what_is.text = "Aqui a IA explica o que é o produto, para quem ele foi feito e por que ele chama atenção no mercado.";
+  d.story.text = "Eu já tinha tentado de tudo e nada funcionava.\n\nAté que encontrei uma abordagem diferente — e foi aí que as coisas mudaram.\n\nNesta seção a IA conta uma narrativa em primeira pessoa que conecta a dor do leitor ao produto.";
+  d.how_it_works.text = "Passo a passo de como o produto funciona na prática, explicado de forma simples.";
+  d.benefits.items = ["Benefício específico nº 1", "Benefício específico nº 2", "Benefício específico nº 3", "Benefício específico nº 4"];
+  d.pros.items = ["Ponto positivo real", "Outro ponto forte"];
+  d.cons.items = ["Ponto de atenção honesto"];
+  d.for_whom.items = ["Perfil de leitor 1", "Perfil de leitor 2", "Perfil de leitor 3"];
+  d.proof.items = ["Mais de 10.000 clientes atendidos", "Método com base científica"];
+  d.trust_badges.visible = true;
+  d.faq.items = [
+    { q: "Tem garantia?", a: "Sim, garantia oficial do produtor." },
+    { q: "Como recebo o acesso?", a: "Por e-mail, minutos após a confirmação." },
+  ];
+  d.comparison.rows = [
+    { feature: "Garantia", a: "30 dias", b: "Sem garantia" },
+    { feature: "Suporte", a: "Oficial", b: "Inexistente" },
+    { feature: "Preço", a: "Promocional", b: "Variável" },
+  ];
+  d.comparison.winner = "Produto Oficial";
+  d.quiz.questions = [
+    { question: "Qual é o seu maior objetivo hoje?", options: ["Resultados rápidos", "Resultado duradouro", "Só estou pesquisando"] },
+    { question: "Quanto tempo por dia você tem disponível?", options: ["Menos de 15 min", "30 min", "1 hora ou mais"] },
+  ];
+  d.quiz.result = "Com base nas suas respostas, esta é a solução recomendada para o seu perfil.";
+  const isGate = (GATE_TYPES as string[]).includes(type);
+  d.urgency_bar.visible = !isGate && !["cookie_notice", "bridge"].includes(type);
+  d.viewers_counter.visible = d.urgency_bar.visible;
+  d.testimonials.visible = !isGate && !["cookie_notice"].includes(type);
+  d.testimonials.items = [
+    { name: "Mariana L.", text: "Comecei sem esperar muito e me surpreendi com o resultado.", stars: 5 },
+    { name: "Rafael S.", text: "Valeu cada centavo. O suporte respondeu rápido.", stars: 4 },
+  ];
+  d.comments.visible = ["review", "advertorial", "native_ad", "story"].includes(type);
+  d.comments.items = [
+    { name: "Camila Rodrigues", text: "Alguém já testou? To quase pedindo", likes: 12, time: "2 h" },
+    { name: "Pedro Henrique", text: "comprei semana passada, chegou certinho", likes: 8, time: "5 h" },
+  ];
+  d.author_byline.visible = ["advertorial", "native_ad"].includes(type);
+  d.author_byline.name = "Carla M.";
+  d.author_byline.role = "Redação";
+  return b;
 }
 
 function esc(s: string) {
@@ -615,6 +687,55 @@ export function renderPresellHtml(blocks: PresellBlocks, fallbackTitle: string, 
       case "topbar":
         if (b.text) sec.push(`<div class="topbar">${esc(b.text)}</div>`);
         break;
+      case "urgency_bar":
+        if (b.text) sec.push(`<div class="urgbar">${esc(b.text)}</div>`);
+        break;
+      case "viewers_counter": {
+        const min = Math.max(1, Number(b.min) || 34);
+        const max = Math.max(min + 1, Number(b.max) || 97);
+        sec.push(`<div class="viewers-wrap"><div class="viewers"><span class="vdot"></span><span id="vcount">${min}</span>&nbsp;pessoas estão vendo esta página agora</div></div>
+<script>
+(function(){var mn=${min},mx=${max},el=document.getElementById('vcount');if(!el)return;
+function r(){return Math.floor(mn+Math.random()*(mx-mn+1));}
+el.textContent=r();setInterval(function(){el.textContent=r();},7000+Math.random()*6000);})();
+</script>`);
+        break;
+      }
+      case "author_byline": {
+        const name = b.name || "Redação";
+        const date = b.date || new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
+        sec.push(`<div class="byline-wrap"><div class="wrap byline">
+  <div class="byline-av">${esc(String(name).trim().charAt(0).toUpperCase() || "R")}</div>
+  <div class="byline-info"><strong>Por ${esc(name)}</strong>${b.role ? `<span class="byline-role"> · ${esc(b.role)}</span>` : ""}<div class="byline-date">Publicado em ${esc(date)}</div></div>
+</div></div>`);
+        break;
+      }
+      case "testimonials":
+        if (b.items?.length)
+          sec.push(section(
+            `<h2>${esc(b.title || "O que estão dizendo")}</h2><div class="testis">${b.items
+              .map((t: any) => `<blockquote>${t.stars ? `<div class="t-stars">${"⭐".repeat(Math.min(5, Math.max(1, Number(t.stars) || 5)))}</div>` : ""}<p>"${esc(t.text)}"</p><cite>— ${esc(t.name)}</cite></blockquote>`)
+              .join("")}</div>`
+          ));
+        break;
+      case "comments":
+        if (b.items?.length)
+          sec.push(section(
+            `<h3 class="fbc-title">${esc(b.title || "Comentários")} <span class="fbc-count">(${b.items.length})</span></h3>
+<div class="fbcomments">${b.items.map((c: any) => {
+              const initial = esc(String(c.name ?? "?").trim().charAt(0).toUpperCase() || "?");
+              const hue = Math.abs(String(c.name ?? "").split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+              return `<div class="fbc">
+  <div class="fbc-av" style="background:hsl(${hue},55%,45%)">${initial}</div>
+  <div class="fbc-body">
+    <div class="fbc-bubble"><strong>${esc(c.name)}</strong><p>${esc(c.text)}</p></div>
+    <div class="fbc-meta">Curtir · Responder${c.time ? ` · ${esc(c.time)}` : ""}${Number(c.likes) > 0 ? ` · <span class="fbc-likes">👍 ${Number(c.likes)}</span>` : ""}</div>
+  </div>
+</div>`;
+            }).join("")}</div>
+<p class="fbc-note">Comentários ilustrativos.</p>`
+          ));
+        break;
       case "headline":
         sec.push(section(
           `<h1>${esc(b.title || fallbackTitle)}</h1>${b.subtitle ? `<p class="sub">${esc(b.subtitle)}</p>` : ""}
@@ -673,10 +794,35 @@ ${b.winner ? `<p class="winner"><strong>Recomendado:</strong> ${esc(b.winner)}</
         break;
       }
       case "quiz": {
-        const qs = (b.questions || []).map((q: any, i: number) =>
-          `<div class="q"><h3>${i + 1}. ${esc(q.question)}</h3><ul>${(q.options || []).map((o: string) => `<li>${esc(o)}</li>`).join("")}</ul></div>`).join("");
+        const qs = b.questions || [];
+        if (!qs.length) break;
+        // Quiz interativo: uma pergunta por vez; ao final revela a "solução
+        // recomendada" com CTA. Toda opção avança (segmenta e engaja).
+        const steps = qs.map((q: any, i: number) =>
+          `<div class="qstep" data-qs="${i}"${i ? ` style="display:none"` : ""}>
+  <h3>${esc(q.question)}</h3>
+  <div class="qopts">${(q.options || []).map((o: string) => `<button type="button" class="qopt" data-next="${i + 1}">${esc(o)}</button>`).join("")}</div>
+</div>`).join("");
         sec.push(section(
-          `<h2>${esc(b.title)}</h2>${qs}${b.result ? `<div class="result"><strong>Recomendação:</strong> ${esc(b.result)}</div>` : ""}`
+          `<h2>${esc(b.title)}</h2>
+<div class="quizbox" id="quizbox">
+  <div class="qprog" id="qprog">Pergunta 1 de ${qs.length}</div>
+  ${steps}
+  <div class="qresult" id="qresult" style="display:none">
+    <div class="qresult-badge">✓ Análise concluída</div>
+    ${b.result ? `<p class="qresult-text">${esc(b.result)}</p>` : ""}
+    <a class="cta" data-cta="1" href="${esc(aff)}" target="_blank" rel="sponsored noopener noreferrer">${esc(d.cta?.text || "Ver a solução recomendada")} →</a>
+  </div>
+</div>
+<script>
+(function(){var box=document.getElementById('quizbox');if(!box)return;var total=${qs.length};
+box.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target.closest('.qopt'):null;if(!t)return;
+t.classList.add('qsel');var n=parseInt(t.getAttribute('data-next'),10);
+setTimeout(function(){var cur=t.closest('.qstep');if(cur)cur.style.display='none';
+var prog=document.getElementById('qprog');
+if(n>=total){var res=document.getElementById('qresult');if(res)res.style.display='block';if(prog)prog.style.display='none';}
+else{var nx=box.querySelector('[data-qs="'+n+'"]');if(nx)nx.style.display='block';if(prog)prog.textContent='Pergunta '+(n+1)+' de '+total;}},280);});})();
+</script>`
         ));
         break;
       }
@@ -743,13 +889,34 @@ ${b.winner ? `<p class="winner"><strong>Recomendado:</strong> ${esc(b.winner)}</
      </a>`
     : "";
 
+  // Pixels (instalação padrão apenas — sem eventos customizados)
+  const sanitizeId = (s: string) => String(s ?? "").replace(/[^A-Za-z0-9_-]/g, "");
+  const fbId = sanitizeId(blocks.pixels?.facebook ?? "");
+  const gId = sanitizeId(blocks.pixels?.google ?? "");
+  const pixelsHtml = `${fbId ? `
+<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${fbId}');fbq('track','PageView');</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${fbId}&ev=PageView&noscript=1"/></noscript>` : ""}${gId ? `
+<script async src="https://www.googletagmanager.com/gtag/js?id=${gId}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gId}');</script>` : ""}`;
+
+  // CTA com delay configurável (ex.: VSL — botão aparece após N segundos)
+  const ctaDelay = Math.max(0, Number(d.cta?.reveal_after_seconds) || 0);
+  const ctaDelayHtml = ctaDelay > 0
+    ? `<style>body.cta-hidden .finalcta,body.cta-hidden .sticky-cta,body.cta-hidden .hero .cta{display:none!important}</style>
+<script>document.body.classList.add('cta-hidden');setTimeout(function(){document.body.classList.remove('cta-hidden');},${ctaDelay * 1000});</script>`
+    : "";
+
+  const hasIllustrative =
+    (d.testimonials?.visible && (d.testimonials?.items?.length ?? 0) > 0) ||
+    (d.comments?.visible && (d.comments?.items?.length ?? 0) > 0);
+
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>${esc(d.headline?.title || fallbackTitle)}</title>
 <meta name="description" content="${esc(d.headline?.subtitle || "")}" />
-<meta name="robots" content="index,follow" />
+<meta name="robots" content="index,follow" />${pixelsHtml}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -813,16 +980,56 @@ figcaption{margin-top:10px;font-size:13px;color:var(--muted)}
 @media (min-width:768px){.sticky-cta{display:none}body{padding-bottom:0}}
 footer.aff-footer{padding:32px 20px 24px;text-align:center;color:var(--muted);font-size:12px;border-top:1px solid var(--border);background:var(--surface)}
 footer.aff-footer .disclosure{max-width:720px;margin:0 auto 8px;font-size:13px}
+footer.aff-footer .foot-note{max-width:720px;margin:0 auto 6px;font-size:11px;opacity:.85}
+.urgbar{background:linear-gradient(90deg,#b91c1c,#dc2626);color:#fff;text-align:center;font-size:14px;font-weight:700;padding:10px 16px;position:sticky;top:0;z-index:60;letter-spacing:.2px}
+.viewers-wrap{display:flex;justify-content:center;padding:14px 16px 0}
+.viewers{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:999px;padding:8px 16px;font-size:13px;font-weight:600;color:#334155;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.vdot{width:9px;height:9px;border-radius:50%;background:#22c55e;animation:vpulse 1.6s infinite}
+@keyframes vpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+.byline-wrap{background:var(--bg);border-bottom:1px solid var(--border)}
+.byline{display:flex;align-items:center;gap:12px;padding:14px 20px}
+.byline-av{width:42px;height:42px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0}
+.byline-info{font-size:14px;color:#334155}
+.byline-role{color:var(--muted);font-weight:400}
+.byline-date{font-size:12px;color:var(--muted)}
+.testis{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.testis blockquote{background:#fff;border:1px solid var(--border);padding:20px;border-radius:14px;border-left:4px solid var(--p)}
+.testis cite{display:block;margin-top:10px;font-weight:600;color:var(--muted);font-style:normal;font-size:14px}
+.t-stars{font-size:15px;margin-bottom:8px}
+.fbc-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;margin-bottom:16px}
+.fbc-count{color:var(--muted);font-weight:400;font-size:15px}
+.fbcomments{display:grid;gap:14px;max-width:680px}
+.fbc{display:flex;gap:10px;align-items:flex-start}
+.fbc-av{width:38px;height:38px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0}
+.fbc-bubble{background:var(--surface2);border-radius:16px;padding:10px 14px}
+.fbc-bubble strong{font-size:13.5px;display:block;margin-bottom:2px}
+.fbc-bubble p{font-size:14px;color:#334155;line-height:1.5}
+.fbc-meta{font-size:12px;color:var(--muted);margin-top:5px;padding-left:8px}
+.fbc-likes{background:#fff;border:1px solid var(--border);border-radius:999px;padding:1px 8px;font-size:11px}
+.fbc-note{font-size:11px;color:var(--muted);margin-top:12px;font-style:italic}
+.quizbox{max-width:640px;margin:0 auto}
+.qprog{text-align:center;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px}
+.qstep h3{font-size:20px;margin-bottom:16px;text-align:center;font-family:'Plus Jakarta Sans',sans-serif}
+.qopts{display:grid;gap:10px}
+.qopt{background:#fff;border:2px solid var(--border);border-radius:14px;padding:16px 20px;font-size:16px;font-weight:500;text-align:left;cursor:pointer;transition:all .15s;font-family:inherit;color:var(--fg)}
+.qopt:hover{border-color:var(--p);background:color-mix(in srgb,var(--p) 6%,#fff)}
+.qopt.qsel{border-color:var(--p);background:color-mix(in srgb,var(--p) 12%,#fff)}
+.qresult{text-align:center;padding:8px 0}
+.qresult-badge{display:inline-block;background:#ecfdf5;color:#065f46;border:1px solid #10b981;border-radius:999px;padding:6px 16px;font-size:13px;font-weight:700;margin-bottom:14px}
+.qresult-text{font-size:17px;margin-bottom:8px;line-height:1.7}
 ${typeStyles(blocks.type)}
 </style></head>
 <body>
 ${sec.join("\n")}
 <footer class="aff-footer">
 <p class="disclosure">${esc(disclosure)}</p>
+${hasIllustrative ? `<p class="foot-note">Os depoimentos e comentários exibidos nesta página são conteúdo ilustrativo.</p>` : ""}
+<p class="foot-note">Resultados podem variar de pessoa para pessoa. Nenhum resultado específico é garantido.</p>
 <p>© ${new Date().getFullYear()}. Conteúdo independente. · <a href="${privacyHref}" style="color:inherit;text-decoration:underline">Política de Privacidade</a></p>
 </footer>
 ${stickyCta}
 ${cookieOverlay}
 ${waHtml}
+${ctaDelayHtml}
 </body></html>`;
 }

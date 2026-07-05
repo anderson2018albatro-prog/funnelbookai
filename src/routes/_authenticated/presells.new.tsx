@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Sparkles, Zap } from "lucide-react";
+import { Eye, Loader2, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { renderPresellHtml, samplePresell, type PresellType } from "@/lib/presell-blocks";
+import { useMemo } from "react";
 
 export const Route = createFileRoute("/_authenticated/presells/new")({
   component: NewPresell,
@@ -81,9 +83,18 @@ function NewPresell() {
     niche: "", target_audience: "", tone: "persuasivo", language: "auto",
     extra_prompt: "", manual_info: "",
     whatsapp_phone: "", whatsapp_message: "",
+    fb_pixel_id: "", google_tag_id: "",
+    cta_delay_seconds: "0",
   });
   const [busy, setBusy] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  // Preview de exemplo do formato selecionado (conteúdo ilustrativo)
+  const previewHtml = useMemo(
+    () => renderPresellHtml(samplePresell(form.presell_type as PresellType), "Exemplo"),
+    [form.presell_type],
+  );
 
   async function submit() {
     if (!form.affiliate_url) { toast.error("Informe o link de afiliado"); return; }
@@ -153,6 +164,23 @@ function NewPresell() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Preview de exemplo do formato */}
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <button type="button" className="flex w-full items-center gap-2 text-sm font-semibold" onClick={() => setShowPreview((v) => !v)}>
+            <Eye className="h-4 w-4 text-primary" />
+            Preview de exemplo — {selectedType?.label ?? form.presell_type}
+            <span className="ml-auto text-xs font-normal text-muted-foreground">{showPreview ? "ocultar" : "mostrar"}</span>
+          </button>
+          {showPreview && (
+            <>
+              <div className="mt-3 overflow-hidden rounded-xl border border-border" style={{ height: 420 }}>
+                <iframe srcDoc={previewHtml} className="h-full w-full" title="preview do formato" />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Conteúdo ilustrativo — o texto real é gerado pela IA com base no seu produto.</p>
+            </>
+          )}
         </div>
 
         {/* Gate type info */}
@@ -236,6 +264,39 @@ function NewPresell() {
               </div>
             </>
           )}
+
+          {/* VSL: delay do botão */}
+          {form.presell_type === "vsl" && (
+            <div className="rounded-xl border border-border bg-surface p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⏱️</span>
+                <span className="text-sm font-semibold">Delay do botão de CTA</span>
+              </div>
+              <Label className="text-xs">Segundos até o botão aparecer (0 = sempre visível)</Label>
+              <Input type="number" min={0} max={600} value={form.cta_delay_seconds}
+                onChange={(e) => set("cta_delay_seconds", e.target.value)} placeholder="Ex.: 90" />
+              <p className="text-xs text-muted-foreground">Padrão em VSLs: o botão só aparece depois que o vídeo constrói o interesse.</p>
+            </div>
+          )}
+
+          {/* Pixels (instalação padrão) */}
+          <div className="rounded-xl border border-border bg-surface p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📊</span>
+              <span className="text-sm font-semibold">Pixels de rastreamento <span className="text-muted-foreground font-normal">(opcional)</span></span>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div>
+                <Label className="text-xs">Facebook Pixel ID</Label>
+                <Input value={form.fb_pixel_id} onChange={(e) => set("fb_pixel_id", e.target.value)} placeholder="123456789012345" />
+              </div>
+              <div>
+                <Label className="text-xs">Google tag ID (gtag)</Label>
+                <Input value={form.google_tag_id} onChange={(e) => set("google_tag_id", e.target.value)} placeholder="G-XXXXXXXXXX ou AW-..." />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Instalação padrão de PageView — sem eventos customizados.</p>
+          </div>
 
           {/* WhatsApp button optional */}
           <div className="rounded-xl border border-border bg-surface p-3 space-y-2">

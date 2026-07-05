@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import {
   PRESELL_LABELS, DEFAULT_THEME, DEFAULT_DISCLOSURE, emptyPresell, renderPresellHtml, isValidAffiliateUrl,
-  type PresellBlockKey, type PresellBlocks, type PresellType, type PresellTheme,
+  type PresellBlockKey, type PresellBlocks, type PresellPixels, type PresellType, type PresellTheme,
 } from "@/lib/presell-blocks";
 
 export const Route = createFileRoute("/_authenticated/presells/$id/edit")({
@@ -28,6 +28,7 @@ function EditPresell() {
   const [affUrl, setAffUrl] = useState("");
   const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
   const [theme, setTheme] = useState<PresellTheme>(DEFAULT_THEME);
+  const [pixels, setPixels] = useState<PresellPixels>({ facebook: "", google: "" });
   const [saving, setSaving] = useState(false);
 
   const pageQ = useQuery({
@@ -48,8 +49,13 @@ function EditPresell() {
     // Backfill new optional fields if missing (older records).
     if (!initial.theme) initial.theme = { ...DEFAULT_THEME };
     if (!initial.disclosure_text) initial.disclosure_text = row.disclosure_text || DEFAULT_DISCLOSURE;
-    if (!initial.data.whatsapp_button) {
-      (initial.data as any).whatsapp_button = { visible: false, phone: "", message: "Olá! Tenho interesse neste produto.", color: "#25d366" };
+    const defaults = emptyPresell(initial.type ?? (row.presell_type as PresellType) ?? "review", row.affiliate_url);
+    for (const key of Object.keys(defaults.data) as PresellBlockKey[]) {
+      if (!(initial.data as any)[key]) (initial.data as any)[key] = (defaults.data as any)[key];
+      if (!(initial.order as string[]).includes(key) && key !== "whatsapp_button") {
+        // blocos novos entram no fim, ocultos por padrão em páginas antigas
+        (initial.order as string[]).push(key);
+      }
     }
     if (!(initial.order as string[]).includes("whatsapp_button")) {
       (initial.order as string[]).push("whatsapp_button");
@@ -58,6 +64,7 @@ function EditPresell() {
     setAffUrl(row.affiliate_url || "");
     setDisclosure(initial.disclosure_text || DEFAULT_DISCLOSURE);
     setTheme(initial.theme || DEFAULT_THEME);
+    setPixels(initial.pixels ?? { facebook: "", google: "" });
   }, [pageQ.data?.id, (pageQ.data as any)?.status]);
 
   if (pageQ.isLoading || !blocks)
@@ -89,7 +96,7 @@ function EditPresell() {
     if (!affValid) { toast.error("Link de afiliado inválido"); return; }
     setSaving(true);
     try {
-      const b: PresellBlocks = { ...blocks, affiliate_url: affUrl, disclosure_text: disclosure, theme };
+      const b: PresellBlocks = { ...blocks, affiliate_url: affUrl, disclosure_text: disclosure, theme, pixels };
       const title = b.data.headline.title || page.title;
       const html = renderPresellHtml(b, title, page.slug);
       const { error } = await supabase.from("presells")
@@ -122,7 +129,7 @@ function EditPresell() {
     window.open(affUrl, "_blank", "noopener,noreferrer");
   }
 
-  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", disclosure_text: disclosure, theme }, page.title, page.slug);
+  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", disclosure_text: disclosure, theme, pixels }, page.title, page.slug);
   const isProcessing = page.status === "processing";
 
   return (
@@ -171,6 +178,21 @@ function EditPresell() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <ColorField label="Primária" value={theme.primary} onChange={(v) => setTheme((t) => ({ ...t, primary: v }))} />
                 <ColorField label="Acento" value={theme.accent} onChange={(v) => setTheme((t) => ({ ...t, accent: v }))} />
+              </div>
+            </div>
+
+            {/* Pixels */}
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <Label>Pixels de rastreamento (instalação padrão)</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Facebook Pixel ID</Label>
+                  <Input value={pixels.facebook} onChange={(e) => setPixels((p) => ({ ...p, facebook: e.target.value }))} placeholder="123456789012345" />
+                </div>
+                <div>
+                  <Label className="text-xs">Google tag ID</Label>
+                  <Input value={pixels.google} onChange={(e) => setPixels((p) => ({ ...p, google: e.target.value }))} placeholder="G-XXXXXXXXXX" />
+                </div>
               </div>
             </div>
 
@@ -413,7 +435,98 @@ function BlockEditor({ blockKey, block, update, uploadImage }: {
             <input type="checkbox" checked={block.sticky !== false} onChange={(e) => update({ sticky: e.target.checked })} />
             Botão flutuante no mobile
           </label>
+          <div>
+            <Label className="text-xs">Delay para o botão aparecer (segundos, 0 = sempre visível)</Label>
+            <Input type="number" min={0} max={600} value={block.reveal_after_seconds ?? 0}
+              onChange={(e) => update({ reveal_after_seconds: Math.min(600, Math.max(0, Number(e.target.value) || 0)) })} />
+          </div>
           <p className="text-xs text-muted-foreground">O link de afiliado é configurado no topo. Todo CTA abre em nova aba com rel="sponsored noopener noreferrer".</p>
+        </div>
+      );
+    case "urgency_bar":
+      return <Input value={block.text ?? ""} onChange={(e) => update({ text: e.target.value })} placeholder="Texto da barra de urgência do topo" />;
+    case "viewers_counter":
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Mínimo de pessoas</Label>
+              <Input type="number" min={1} value={block.min ?? 34} onChange={(e) => update({ min: Math.max(1, Number(e.target.value) || 1) })} />
+            </div>
+            <div>
+              <Label className="text-xs">Máximo de pessoas</Label>
+              <Input type="number" min={2} value={block.max ?? 97} onChange={(e) => update({ max: Math.max(2, Number(e.target.value) || 2) })} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Número aleatório dentro da faixa, atualizado a cada poucos segundos.</p>
+        </div>
+      );
+    case "testimonials":
+      return (
+        <div className="space-y-2">
+          <Input value={block.title ?? ""} onChange={(e) => update({ title: e.target.value })} placeholder="Título" />
+          {(block.items || []).map((t: any, i: number) => (
+            <div key={i} className="space-y-1 rounded border border-border p-2">
+              <div className="flex gap-2">
+                <Input value={t.name} placeholder="Nome" onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...t, name: e.target.value }; update({ items });
+                }} />
+                <Input type="number" min={1} max={5} className="w-20" value={t.stars ?? 5} onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...t, stars: Math.min(5, Math.max(1, Number(e.target.value) || 5)) }; update({ items });
+                }} />
+              </div>
+              <Textarea rows={2} value={t.text} placeholder="Depoimento" onChange={(e) => {
+                const items = [...block.items]; items[i] = { ...t, text: e.target.value }; update({ items });
+              }} />
+              <Button size="sm" variant="ghost" onClick={() => update({ items: block.items.filter((_: any, x: number) => x !== i) })}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => update({ items: [...(block.items || []), { name: "", text: "", stars: 5 }] })}>
+            <Plus className="mr-1 h-3 w-3" /> Depoimento
+          </Button>
+          <p className="text-xs text-muted-foreground">O rodapé exibe automaticamente o aviso de conteúdo ilustrativo.</p>
+        </div>
+      );
+    case "comments":
+      return (
+        <div className="space-y-2">
+          <Input value={block.title ?? ""} onChange={(e) => update({ title: e.target.value })} placeholder="Título (ex.: Comentários)" />
+          {(block.items || []).map((c: any, i: number) => (
+            <div key={i} className="space-y-1 rounded border border-border p-2">
+              <div className="flex gap-2">
+                <Input value={c.name} placeholder="Nome" onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...c, name: e.target.value }; update({ items });
+                }} />
+                <Input type="number" min={0} className="w-20" title="Curtidas" value={c.likes ?? 0} onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...c, likes: Math.max(0, Number(e.target.value) || 0) }; update({ items });
+                }} />
+                <Input className="w-20" title="Tempo (ex.: 2 h)" value={c.time ?? ""} placeholder="2 h" onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...c, time: e.target.value }; update({ items });
+                }} />
+              </div>
+              <Textarea rows={2} value={c.text} placeholder="Comentário" onChange={(e) => {
+                const items = [...block.items]; items[i] = { ...c, text: e.target.value }; update({ items });
+              }} />
+              <Button size="sm" variant="ghost" onClick={() => update({ items: block.items.filter((_: any, x: number) => x !== i) })}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => update({ items: [...(block.items || []), { name: "", text: "", likes: 0, time: "" }] })}>
+            <Plus className="mr-1 h-3 w-3" /> Comentário
+          </Button>
+        </div>
+      );
+    case "author_byline":
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={block.name ?? ""} onChange={(e) => update({ name: e.target.value })} placeholder="Nome (fictício genérico)" />
+            <Input value={block.role ?? ""} onChange={(e) => update({ role: e.target.value })} placeholder="Cargo (ex.: Redação)" />
+          </div>
+          <Input value={block.date ?? ""} onChange={(e) => update({ date: e.target.value })} placeholder="Data (vazio = hoje)" />
         </div>
       );
     case "whatsapp_button":
