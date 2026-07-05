@@ -1,82 +1,74 @@
-# PROGRESS — FunnelBook AI (branch: terminar-saas-claude)
+# PROGRESS — FunnelBook AI
 
-## Sessão 2 (2026-06-27) — Presell completo
+## Sessão 3 (2026-07-05) — 3 grandes atualizações + deploy completo
 
-### O que foi entregue
+**Tudo deployado**: front na Vercel (main) + todas as 6 edge functions no Supabase.
+URL: https://funnelbookai.vercel.app
 
-#### Detecção automática de idioma
-- `generate-presell/index.ts`: função `detectLangFromHtml()` extrai `<html lang="...">` da página do produtor
-- 14 idiomas mapeados: pt-BR, pt-PT, en, es, fr, de, it, ja, zh, ru, ar, hi, nl, pl, tr
-- Select de idioma: primeira opção agora é "Auto (detectar da página)"
-- Default mudou de `"pt-BR"` para `"auto"` — fallback para pt-BR quando não detecta
+### Infra
+- `_shared/ai.ts`: Claude Fable 5 (`ANTHROPIC_API_KEY`) como provedor prioritário,
+  com fallback server-side p/ Opus 4.8 e depois Lovable → Gemini → OpenAI.
+  Para ativar: configurar a secret `ANTHROPIC_API_KEY` no Supabase.
 
-#### Botão WhatsApp flutuante
-- `generate-presell/index.ts`: aceita `whatsapp_phone` + `whatsapp_message` no body
-- `presell-blocks.ts`: tipo `whatsapp_button` adicionado ao `PresellBlockKey`
-- `renderPresellHtml`: renderiza botão SVG fixo bottom-right antes do `</body>`
-- `presells.new.tsx`: campos opcionais Phone + Mensagem na criação
-- `presells.$id.edit.tsx`: case `whatsapp_button` no BlockEditor (phone, mensagem, cor)
-- Backfill automático para presells antigas no editor (sem whatsapp_button no DB)
+### Feature 1 — Ebook profissional
+- Geração em 2 fases: esqueleto (título, capa, sumário, plano de capítulos com
+  seções e descrição de imagem) + capítulo por capítulo em chamadas separadas,
+  com retry automático (3x) e progresso parcial salvo no Supabase
+- 7–12 capítulos, arco problema → agitação → método → aplicação prática
+- Cada capítulo: storytelling de abertura, seções com subtítulos (`### `),
+  exemplo prático brasileiro e box "Ação Prática"
+- Prompt exige PT-BR natural/conversacional e proíbe clichês de IA
+- `src/lib/ebook-art.ts`: capa profissional + banners decorativos por capítulo
+  gerados por código (SVG → PNG, 8 paletas por hash do título)
+- PDF: capa com gradiente/tipografia, sumário com links clicáveis, hierarquia
+  tipográfica, box Ação Prática, rodapé com autor + numeração
+- Editor: barra de progresso por capítulo, campo Ação Prática, preview da capa
+- Formulário: campo autor + capítulos 7/8/10/12
 
-#### Página de Política de Privacidade
-- Nova rota `src/routes/pre.$slug.privacidade.tsx` → `/pre/:slug/privacidade`
-- Server function busca title + disclosure do Supabase
-- Seções: afiliado, dados coletados, cookies, conteúdo, contato
-- Rodapé de todas as presells agora tem link "Política de Privacidade"
-- Nota clara sobre depoimentos placeholder e sem cookie stuffing
+### Feature 2 — Página de vendas com IA por comando livre
+- Novo fluxo "Criar com IA": textarea grande + chips de sugestão clicáveis
+- IA decide a estrutura: `vsl | carta | lancamento | low_ticket | high_ticket | assinatura`
+- Copy BR direct response: headline big idea, lead de dor, mecanismo único
+  nomeado, 8+ bullets de fascínio, stack com ancoragem, bônus com valores,
+  garantia incondicional, FAQ de objeções, urgência ética, múltiplos CTAs
+- Novos blocos: `video_vsl`, `dor`, `mecanismo`, `stack`, `urgencia`
+- 3 temas visuais: clean branco, dark premium, high-convert (vermelho/amarelo)
+- Regeneração por seção: `action: "regenerate_section"` na edge function +
+  botões no editor (RefreshCw = regenerar; Sparkles + RefreshCw = com instrução)
+- `supabase/functions/_shared/sales-blocks.ts` espelha `src/lib/sales-blocks.ts`
 
----
-
-## Estado atual dos 3 fluxos
-
-### 1. Presell (generate-presell)
-- ✅ Fluxo: affiliate_url + source_url opcional → IA gera → editor visual
-- ✅ 6 tipos conteúdo: review, advertorial, vsl, comparativo, quiz, bridge
-- ✅ Gate pages: age_gate, gender_gate, country_gate, captcha_gate
-- ✅ Urgência: countdown, coupon
-- ✅ Cores da marca extraídas do site do produtor
-- ✅ Detecção automática de idioma (detectLangFromHtml)
-- ✅ Botão WhatsApp flutuante (opcional, configurável no editor)
-- ✅ Página de Política de Privacidade auto-gerada por slug
-- ⬜ Deploy: aguardando confirmação do usuário (constraint: sem deploy sem ok explícito)
-
-### 2. Ebook (generate-ebook)
-- ✅ Geração com Gemini/OpenAI/Lovable
-- ✅ Bug Gemini key corrigido e deployado (sessão 1)
-- ✅ PDF com imagens LoremFlickr por capítulo
-- ✅ Editor visual pós-geração
-
-### 3. Página de Vendas (generate-sales-page)
-- ✅ Geração a partir do ebook
-- ✅ Geração a partir de prompt livre (generate-sales-page-from-prompt)
-- ✅ Editor de blocos com preview ao vivo
-- ✅ Polling corrigido: editor atualiza quando IA termina (sessão 1)
-- ✅ Bug Gemini key + repairJson corrigidos (sessão 1, não deployado)
-- ⬜ Deploy: aguardando confirmação do usuário
+### Feature 3 — Presell premium
+- Elementos de conversão em todos os formatos: barra de urgência, contador de
+  "pessoas vendo agora", depoimentos, comentários estilo rede social (nomes BR,
+  likes, tempo), selos, CTA fixo mobile
+- Advertorial/native: byline de autor fictício genérico + data
+- Quiz interativo (pergunta por vez → resultado + CTA); VSL com delay de botão
+- Pixels FB/Google (instalação padrão, IDs sanitizados)
+- Preview de exemplo de cada formato na criação (`samplePresell`)
+- Guardrails mantidos + rodapé: "conteúdo ilustrativo" e "resultados não garantidos"
 
 ---
 
-## Pendências
+## Estado: COMPLETO e DEPLOYADO
 
-1. **[DEPLOY] generate-presell** — tem todas as features novas, precisa de deploy
-2. **[DEPLOY] generate-sales-page** — Gemini key + repairJson corrigidos, precisa de deploy
-3. **[OPCIONAL] Presell: testimoniais gerados pela IA**  
-   - Nos tipos review/story/advertorial, a IA pode gerar testemunhos mas devem ser marcados como `[EXEMPLO]`
-   - Atualmente o prompt não instrui sobre isso explicitamente (mas a página de vendas já tem aviso de placeholder)
+- Vercel (front): auto-deploy do main ✅
+- Edge functions (todas deployadas 2026-07-05): generate-ebook,
+  generate-sales-page-from-prompt, generate-presell, generate-sales-page,
+  assistant-chat, improve-copy ✅
 
----
+## Teste manual recomendado
 
-## Decisões tomadas
+1. Ebook: criar com 7 capítulos → acompanhar barra de progresso → baixar PDF
+   (capa, sumário clicável, boxes de Ação Prática)
+2. Página de vendas: "Criar com IA" com comando livre → verificar estrutura
+   escolhida → trocar tema → regenerar uma seção
+3. Presell: criar review com pixel de teste → conferir urgência/contador/
+   comentários → quiz interativo → publicar e abrir /pre/slug
+4. Mock sem créditos: `test_mode: true` ou botões verdes em /debug
 
-- Imagens PDF ebook: LoremFlickr (gratuito, CORS). Sem API paga conforme instrução.
-- Depoimentos: marcados como placeholder. Nunca apresentados como reais.
-- Sem cloaking, sem redirect automático, sem cookie stuffing.
-- WhatsApp: link `wa.me` — redirect real após clique do usuário.
-- Deploy: nunca na main. Só na branch `terminar-saas-claude`.
+## Decisões
 
----
-
-## O que precisa de você
-
-- Para **deploy das edge functions** (generate-presell, generate-sales-page): confirme "pode fazer deploy" e eu executo
-- Opcional: API de imagens paga (Stability AI, Dall-E) para ebook com imagens temáticas reais
+- Imagens do ebook: 100% programáticas (SVG) — sem APIs pagas nem LoremFlickr
+- Depoimentos/comentários: sempre com aviso de conteúdo ilustrativo no rodapé
+- Sem cloaking, sem redirect automático, sem cookie stuffing
+- Pixels: apenas instalação padrão de PageView
