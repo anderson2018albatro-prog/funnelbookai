@@ -28,6 +28,7 @@ import { Route as AuthenticatedPresellsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedEbooksIndexRouteImport } from './routes/_authenticated/ebooks.index'
 import { Route as PreSlugPrivacidadeRouteImport } from './routes/pre.$slug.privacidade'
 import { Route as AuthenticatedSalesPagesNewRouteImport } from './routes/_authenticated/sales-pages.new'
+import { Route as AuthenticatedSalesPagesBuilderRouteImport } from './routes/_authenticated/sales-pages.builder'
 import { Route as AuthenticatedPresellsNewRouteImport } from './routes/_authenticated/presells.new'
 import { Route as AuthenticatedEbooksIdRouteImport } from './routes/_authenticated/ebooks.$id'
 import { Route as AuthenticatedSalesPagesIdEditRouteImport } from './routes/_authenticated/sales-pages.$id.edit'
@@ -131,6 +132,12 @@ const AuthenticatedSalesPagesNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedSalesPagesRoute,
   } as any)
+const AuthenticatedSalesPagesBuilderRoute =
+  AuthenticatedSalesPagesBuilderRouteImport.update({
+    id: '/builder',
+    path: '/builder',
+    getParentRoute: () => AuthenticatedSalesPagesRoute,
+  } as any)
 const AuthenticatedPresellsNewRoute =
   AuthenticatedPresellsNewRouteImport.update({
     id: '/new',
@@ -171,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/pre/$slug': typeof PreSlugRouteWithChildren
   '/ebooks/$id': typeof AuthenticatedEbooksIdRoute
   '/presells/new': typeof AuthenticatedPresellsNewRoute
+  '/sales-pages/builder': typeof AuthenticatedSalesPagesBuilderRoute
   '/sales-pages/new': typeof AuthenticatedSalesPagesNewRoute
   '/pre/$slug/privacidade': typeof PreSlugPrivacidadeRoute
   '/ebooks/': typeof AuthenticatedEbooksIndexRoute
@@ -192,6 +200,7 @@ export interface FileRoutesByTo {
   '/pre/$slug': typeof PreSlugRouteWithChildren
   '/ebooks/$id': typeof AuthenticatedEbooksIdRoute
   '/presells/new': typeof AuthenticatedPresellsNewRoute
+  '/sales-pages/builder': typeof AuthenticatedSalesPagesBuilderRoute
   '/sales-pages/new': typeof AuthenticatedSalesPagesNewRoute
   '/pre/$slug/privacidade': typeof PreSlugPrivacidadeRoute
   '/ebooks': typeof AuthenticatedEbooksIndexRoute
@@ -218,6 +227,7 @@ export interface FileRoutesById {
   '/pre/$slug': typeof PreSlugRouteWithChildren
   '/_authenticated/ebooks/$id': typeof AuthenticatedEbooksIdRoute
   '/_authenticated/presells/new': typeof AuthenticatedPresellsNewRoute
+  '/_authenticated/sales-pages/builder': typeof AuthenticatedSalesPagesBuilderRoute
   '/_authenticated/sales-pages/new': typeof AuthenticatedSalesPagesNewRoute
   '/pre/$slug/privacidade': typeof PreSlugPrivacidadeRoute
   '/_authenticated/ebooks/': typeof AuthenticatedEbooksIndexRoute
@@ -244,6 +254,7 @@ export interface FileRouteTypes {
     | '/pre/$slug'
     | '/ebooks/$id'
     | '/presells/new'
+    | '/sales-pages/builder'
     | '/sales-pages/new'
     | '/pre/$slug/privacidade'
     | '/ebooks/'
@@ -265,6 +276,7 @@ export interface FileRouteTypes {
     | '/pre/$slug'
     | '/ebooks/$id'
     | '/presells/new'
+    | '/sales-pages/builder'
     | '/sales-pages/new'
     | '/pre/$slug/privacidade'
     | '/ebooks'
@@ -290,6 +302,7 @@ export interface FileRouteTypes {
     | '/pre/$slug'
     | '/_authenticated/ebooks/$id'
     | '/_authenticated/presells/new'
+    | '/_authenticated/sales-pages/builder'
     | '/_authenticated/sales-pages/new'
     | '/pre/$slug/privacidade'
     | '/_authenticated/ebooks/'
@@ -443,6 +456,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSalesPagesNewRouteImport
       parentRoute: typeof AuthenticatedSalesPagesRoute
     }
+    '/_authenticated/sales-pages/builder': {
+      id: '/_authenticated/sales-pages/builder'
+      path: '/builder'
+      fullPath: '/sales-pages/builder'
+      preLoaderRoute: typeof AuthenticatedSalesPagesBuilderRouteImport
+      parentRoute: typeof AuthenticatedSalesPagesRoute
+    }
     '/_authenticated/presells/new': {
       id: '/_authenticated/presells/new'
       path: '/new'
@@ -505,6 +525,7 @@ const AuthenticatedPresellsRouteWithChildren =
   )
 
 interface AuthenticatedSalesPagesRouteChildren {
+  AuthenticatedSalesPagesBuilderRoute: typeof AuthenticatedSalesPagesBuilderRoute
   AuthenticatedSalesPagesNewRoute: typeof AuthenticatedSalesPagesNewRoute
   AuthenticatedSalesPagesIndexRoute: typeof AuthenticatedSalesPagesIndexRoute
   AuthenticatedSalesPagesIdEditRoute: typeof AuthenticatedSalesPagesIdEditRoute
@@ -512,6 +533,7 @@ interface AuthenticatedSalesPagesRouteChildren {
 
 const AuthenticatedSalesPagesRouteChildren: AuthenticatedSalesPagesRouteChildren =
   {
+    AuthenticatedSalesPagesBuilderRoute: AuthenticatedSalesPagesBuilderRoute,
     AuthenticatedSalesPagesNewRoute: AuthenticatedSalesPagesNewRoute,
     AuthenticatedSalesPagesIndexRoute: AuthenticatedSalesPagesIndexRoute,
     AuthenticatedSalesPagesIdEditRoute: AuthenticatedSalesPagesIdEditRoute,

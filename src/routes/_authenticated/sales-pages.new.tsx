@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -169,6 +169,21 @@ function NewSalesPage() {
             </p>
           </div>
         </div>
+
+        {/* Novo: construtor via chat */}
+        <Link
+          to="/sales-pages/builder"
+          search={{ page: undefined }}
+          className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 transition-colors hover:bg-primary/10"
+        >
+          <span className="text-xl">💬</span>
+          <span>
+            <span className="font-display text-sm font-semibold text-primary">Novo: Construtor com IA em chat →</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Converse com a IA, envie imagens (produto, depoimentos, selo) e veja a página sendo montada em tempo real.
+            </span>
+          </span>
+        </Link>
 
         {/* Mode toggle */}
         <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 w-fit">

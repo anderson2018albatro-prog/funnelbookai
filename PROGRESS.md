@@ -1,5 +1,67 @@
 # PROGRESS — FunnelBook AI
 
+## Sessão 5 (2026-07-07) — Construtor de Página de Vendas via CHAT
+
+O usuário conversa com a IA, descreve o que quer na página (textos, seções,
+oferta, depoimentos), envia imagens direto no chat, e vê a página sendo
+montada em tempo real num preview ao lado.
+
+### Como funciona
+1. **Rota `/sales-pages/builder`** (`src/routes/_authenticated/sales-pages.builder.tsx`):
+   chat à esquerda + preview em iframe à direita (desktop); no mobile, abas
+   Chat/Preview. Botão 📎 anexa imagem (máx 8MB) → upload no bucket público
+   `sales-assets` (`{user_id}/chat-*.ext`) → URL vai junto da mensagem.
+   `?page=<id>` retoma a conversa de uma página existente (action "load").
+   Preview renderizado no cliente via `renderBlocksToHtml` a cada resposta.
+2. **Edge Function `sales-chat-builder`** (nova): recebe a mensagem, carrega
+   histórico (tabela `sales_chats`) + blocos atuais da página, monta prompt
+   com o estado JSON e a conversa, e a IA devolve `{reply, patch}`. O patch
+   é validado/mesclado nos blocos (`applyPatch`: só chaves conhecidas, URLs
+   http(s) apenas, listas substituídas por inteiro), a página é re-renderizada
+   e salva. Primeiro turno cria a `sales_pages` + `sales_chats`. Parse com
+   `jsonrepair` (mesmo padrão do ebook). `test_mode: true` responde sem IA.
+3. **IA decide onde a imagem entra** pelo contexto: foto do produto →
+   `product.image_url`; print de depoimento → item em `depoimentos` com
+   `image_url`; selo → `garantia.image_url`. Se ambíguo, ela pergunta.
+4. **Estrutura profissional**: os 17 blocos existentes (hero, dor, mecanismo,
+   produto, promessa, benefícios, stack com ancoragem, bônus, depoimentos,
+   oferta, garantia, urgência, FAQ, CTA final repetido) + rodapé legal novo
+   ("resultados podem variar", termos da plataforma de pagamento).
+5. **Guardrails éticos**: prompt proíbe cloaking, popups enganosos e
+   contadores/vagas falsas (urgência só real e informada pelo usuário);
+   depoimentos SÓ com material fornecido — o servidor força
+   `is_placeholder: true` (aviso visível na página) quando a IA cria
+   depoimentos sem material do usuário na conversa.
+
+### Banco (aplicado no remoto via Management API)
+- Nova tabela `public.sales_chats` (uma conversa por página, RLS por dono)
+  — migration `supabase/migrations/20260707210000_sales_chats.sql`
+
+### Arquivos alterados/criados
+- `supabase/functions/sales-chat-builder/index.ts` (novo)
+- `supabase/migrations/20260707210000_sales_chats.sql` (novo)
+- `src/routes/_authenticated/sales-pages.builder.tsx` (novo)
+- `src/lib/sales-blocks.ts` + `supabase/functions/_shared/sales-blocks.ts`
+  (espelhados): `image_url` em itens de depoimento e na garantia (selo),
+  render das imagens, rodapé com informações legais
+- `src/routes/_authenticated/sales-pages.new.tsx`: card-link para o construtor
+
+### Deploy necessário
+```
+npx supabase functions deploy sales-chat-builder --project-ref nygbgczhydtzyfgbqwkr --use-api
+# _shared/sales-blocks.ts mudou → redeployar também:
+npx supabase functions deploy generate-sales-page-from-prompt --project-ref nygbgczhydtzyfgbqwkr --use-api
+npx supabase functions deploy generate-sales-page --project-ref nygbgczhydtzyfgbqwkr --use-api
+# Front (SEM integração git — deploy manual):
+npx vercel deploy --prod --yes
+```
+
+### Não alterado (fora do escopo, conforme pedido)
+- Autenticação, billing, gerador de ebook e fluxo antigo de sales page
+  (formulário "Criar com IA" continua funcionando igual)
+
+---
+
 ## Sessão 4 (2026-07-07) — Novo formato de presell: Bridge Story
 
 Página ponte narrativa e ética — reduz bloqueio de anúncio via conteúdo real,

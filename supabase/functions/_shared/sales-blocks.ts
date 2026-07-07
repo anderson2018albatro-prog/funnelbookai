@@ -55,9 +55,9 @@ export type BlockMap = {
     cta_text: string; cta_url: string;
   };
   bonus: { visible: boolean; title: string; items: string[] };
-  depoimentos: { visible: boolean; title: string; items: { name: string; text: string; stars?: number; placeholder?: boolean }[]; is_placeholder?: boolean };
+  depoimentos: { visible: boolean; title: string; items: { name: string; text: string; stars?: number; placeholder?: boolean; image_url?: string }[]; is_placeholder?: boolean };
   oferta: { visible: boolean; title: string; description: string; price: string; cta_text: string; cta_url: string };
-  garantia: { visible: boolean; title: string; text: string };
+  garantia: { visible: boolean; title: string; text: string; image_url?: string };
   urgencia: { visible: boolean; title: string; text: string };
   faq: { visible: boolean; title: string; items: { pergunta: string; resposta: string }[] };
   final_cta: { visible: boolean; headline: string; cta_text: string; cta_url: string };
@@ -379,7 +379,7 @@ export function renderBlocksToHtml(blocks: SalesBlocks, fallbackTitle: string): 
       case "depoimentos":
         if (!(b.items?.length)) break;
         sec.push(`<section class="wrap"><h2>${esc(b.title)}</h2><div class="testis">${b.items
-          .map((t: any) => `<blockquote>${t.stars ? `<div class="t-stars">${"⭐".repeat(Math.min(5, t.stars))}</div>` : ""}<p>"${esc(t.text)}"</p><cite>— ${esc(t.name)}</cite></blockquote>`)
+          .map((t: any) => `<blockquote>${t.image_url ? `<img class="t-img" src="${esc(t.image_url)}" alt="${esc(t.name || "depoimento")}" loading="lazy" />` : ""}${t.stars ? `<div class="t-stars">${"⭐".repeat(Math.min(5, t.stars))}</div>` : ""}${t.text ? `<p>"${esc(t.text)}"</p>` : ""}${t.name ? `<cite>— ${esc(t.name)}</cite>` : ""}</blockquote>`)
           .join("")}</div>${b.is_placeholder ? `<p class="placeholder-notice">⚠️ Depoimentos de exemplo — substitua pelos reais antes de publicar.</p>` : ""}</section>`);
         break;
       case "oferta":
@@ -393,7 +393,7 @@ export function renderBlocksToHtml(blocks: SalesBlocks, fallbackTitle: string): 
         break;
       case "garantia":
         if (!b.text) break;
-        sec.push(`<section class="wrap"><div class="guarantee"><h3>${esc(b.title)}</h3><p>${esc(b.text)}</p></div></section>`);
+        sec.push(`<section class="wrap"><div class="guarantee">${b.image_url ? `<img class="g-img" src="${esc(b.image_url)}" alt="selo de garantia" loading="lazy" />` : ""}<h3>${esc(b.title)}</h3><p>${esc(b.text)}</p></div></section>`);
         break;
       case "urgencia":
         if (!b.text) break;
@@ -465,6 +465,8 @@ ul.feat li{background:var(--surface);padding:16px 20px;border-radius:12px;border
 .testis{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 .testis blockquote{background:var(--surface);padding:20px;border-radius:12px;border-left:4px solid var(--a)}
 .testis cite{display:block;margin-top:10px;font-weight:600;color:var(--muted);font-style:normal}
+.t-img{max-width:100%;border-radius:10px;margin-bottom:12px}
+.g-img{max-width:140px;margin:0 auto 14px;display:block}
 .t-stars{font-size:16px;margin-bottom:8px}
 .placeholder-notice{text-align:center;font-size:12px;color:var(--muted);margin-top:16px;font-style:italic}
 details{background:var(--surface);padding:16px 20px;border-radius:10px;margin-bottom:10px;cursor:pointer}
@@ -477,6 +479,10 @@ ${themeCss(theme)}
 </style></head>
 <body>
 ${sec.join("\n")}
-<footer>Criado com FunnelBook AI</footer>
+<footer>
+<p>Resultados podem variar de pessoa para pessoa. Nenhum resultado específico é garantido.</p>
+<p>Este produto não substitui aconselhamento profissional. Ao comprar, você concorda com os termos da plataforma de pagamento.</p>
+<p style="margin-top:8px">© ${new Date().getFullYear()} · Criado com FunnelBook AI</p>
+</footer>
 </body></html>`;
 }
