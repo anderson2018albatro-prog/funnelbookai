@@ -3,7 +3,7 @@
 // Every CTA is a real anchor with target="_blank" rel="sponsored noopener noreferrer".
 
 export type PresellType =
-  | "review" | "advertorial" | "quiz" | "comparativo" | "bridge" | "vsl" | "cookie_notice"
+  | "review" | "advertorial" | "quiz" | "comparativo" | "bridge" | "bridge_story" | "vsl" | "cookie_notice"
   | "native_ad" | "story" | "listicle"
   | "age_gate" | "gender_gate" | "country_gate" | "captcha_gate" | "coupon" | "countdown";
 
@@ -110,6 +110,7 @@ export const PRESELL_TYPE_LABELS: Record<PresellType, string> = {
   review: "Review Premium",
   advertorial: "Advertorial (matéria editorial)",
   story: "Narrativa de Transformação",
+  bridge_story: "Bridge Story (ponte narrativa)",
   native_ad: "Anúncio Nativo (artigo patrocinado)",
   listicle: "Listicle (Top Razões)",
   // ── Interação / escolha ───────────────────────────────────────────────
@@ -153,6 +154,10 @@ export function defaultOrderFor(type: PresellType): PresellBlockKey[] {
       return ["urgency_bar","topbar","headline","viewers_counter","comparison","benefits","testimonials","trust_badges","cta","faq"];
     case "bridge":
       return ["topbar","headline","benefits","testimonials","cookie_notice","cta"];
+    case "bridge_story":
+      // Ponte narrativa ética: sem urgency_bar, sem viewers_counter, sem
+      // depoimentos/comentários fabricados, sem popup — só conteúdo real + CTA claro.
+      return ["topbar","headline","story","how_it_works","benefits","cta"];
     case "vsl":
       return ["urgency_bar","topbar","headline","viewers_counter","video","benefits","testimonials","trust_badges","cta","faq"];
     case "cookie_notice":
@@ -250,9 +255,9 @@ export function samplePresell(type: PresellType): PresellBlocks {
   ];
   d.quiz.result = "Com base nas suas respostas, esta é a solução recomendada para o seu perfil.";
   const isGate = (GATE_TYPES as string[]).includes(type);
-  d.urgency_bar.visible = !isGate && !["cookie_notice", "bridge"].includes(type);
+  d.urgency_bar.visible = !isGate && !["cookie_notice", "bridge", "bridge_story"].includes(type);
   d.viewers_counter.visible = d.urgency_bar.visible;
-  d.testimonials.visible = !isGate && !["cookie_notice"].includes(type);
+  d.testimonials.visible = !isGate && !["cookie_notice", "bridge_story"].includes(type);
   d.testimonials.items = [
     { name: "Mariana L.", text: "Comecei sem esperar muito e me surpreendi com o resultado.", stars: 5 },
     { name: "Rafael S.", text: "Valeu cada centavo. O suporte respondeu rápido.", stars: 4 },
@@ -265,6 +270,20 @@ export function samplePresell(type: PresellType): PresellBlocks {
   d.author_byline.visible = ["advertorial", "native_ad"].includes(type);
   d.author_byline.name = "Carla M.";
   d.author_byline.role = "Redação";
+  if (type === "bridge_story") {
+    d.cookie_notice.visible = false; // sem popup — o CTA já diz o que faz
+    d.topbar.text = "Conteúdo de parceiro · pode conter links de afiliado";
+    d.headline.title = "Exemplo: Eu quase desisti — até mudar uma coisa na minha rotina";
+    d.headline.subtitle = "Uma história real do público, sem promessas milagrosas (conteúdo gerado pela IA)";
+    d.story.title = "Minha história";
+    d.story.text = "Aqui a IA abre com uma situação/dor real do público-alvo, em primeira pessoa, criando identificação genuína.\n\nDepois conta como a pessoa chegou até a solução — a descoberta — sem exageros e sem clickbait.";
+    d.how_it_works.title = "O que eu encontrei";
+    d.how_it_works.text = "Nesta seção a IA faz a transição suave: apresenta o produto de forma natural, explicando o que ele é e por que fez diferença.";
+    d.benefits.title = "O que mudou pra mim";
+    d.benefits.items = ["Benefício real e verificável nº 1", "Benefício real e verificável nº 2", "Benefício real e verificável nº 3"];
+    d.cta.text = "Quero conhecer o método";
+    d.cta.note = "Você será levado ao site oficial do produto. Link de afiliado — sem custo extra pra você.";
+  }
   return b;
 }
 
@@ -570,6 +589,24 @@ h2{font-family:Georgia,serif;font-style:italic;text-align:left;border-bottom:1px
 h2{color:#1e1b4b}.cards li{border-left-color:#7c3aed;background:#f5f3ff}.cards li::before{background:#7c3aed}
 .pros li{background:#ecfdf5;border-color:#10b981;color:#065f46}
 .cta,.cta-large{background:linear-gradient(135deg,#7c3aed,#e11d48);box-shadow:0 10px 30px rgba(124,58,237,.35)}`;
+    case "bridge_story":
+      return `
+body{background:#fdfcfa}
+.topbar{background:#f1ede6;color:#78716c;font-weight:500;letter-spacing:.5px;text-transform:none;font-size:12px}
+.hero{background:linear-gradient(160deg,#292524,#44403c);padding:64px 20px}
+.hero h1{font-size:clamp(26px,4.5vw,42px)}
+.hero .sub{color:#e7e5e4}
+.hero .cta{display:none}
+.band{background:#fdfcfa}.band.alt{background:#f7f5f0}
+.prose{font-size:18px;line-height:1.9;color:#44403c;max-width:680px;margin:0 auto}
+.lead{color:#44403c}
+h2{color:#292524;text-align:center}
+.cards{grid-template-columns:1fr;max-width:620px;margin:0 auto}
+.cards li{border-left-color:#a16207;background:#fffdf7}.cards li::before{background:#a16207}
+.finalcta{padding:36px 0}
+.cta,.cta-large{background:#292524;box-shadow:0 10px 28px rgba(41,37,36,.3)}
+.cta:hover{box-shadow:0 14px 34px rgba(41,37,36,.4)}
+footer.aff-footer{background:#f7f5f0}`;
     case "listicle":
       return `
 .hero{background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:72px 20px}

@@ -1,5 +1,38 @@
 # PROGRESS — FunnelBook AI
 
+## Sessão 4 (2026-07-07) — Novo formato de presell: Bridge Story
+
+Página ponte narrativa e ética — reduz bloqueio de anúncio via conteúdo real,
+sem dark patterns (nada de clique enganoso, urgência falsa ou prova social fabricada).
+
+### O que foi feito
+- Novo tipo `bridge_story` (junto de review, advertorial, quiz, vsl, comparativo etc.)
+- Estrutura: topbar de transparência → headline → story (hook + descoberta em
+  1ª pessoa) → how_it_works (transição suave) → benefits (2-3 reais) → CTA honesto
+- Excluídos de propósito: urgency_bar, viewers_counter, testimonials/comments
+  fabricados, popup de cookie, countdown (forçado também no `buildBlocks`)
+- Prompt do Gemini com guardrails obrigatórios: sem clickbait agressivo, sem
+  escassez/prazos falsos, CTA que diz exatamente o que faz, disclosure de afiliado,
+  proibido imitar página oficial do produtor
+- Card no seletor (grupo "Conteúdo Completo") + preview `samplePresell` + tema
+  visual próprio (editorial calmo, tons quentes) + mock do `test_mode` com story
+- Validado localmente: `npx tsc --noEmit` limpo + 10 checagens de guardrail no
+  HTML renderizado (script em scratchpad; exemplo em `bridge-story-exemplo.html`,
+  arquivo local não versionado — pode apagar após validar)
+
+### Arquivos alterados
+- `supabase/functions/generate-presell/index.ts` — VALID_TYPES, defaultOrderFor,
+  typeGuidance + regras específicas no prompt, buildBlocks (urgency/viewers off),
+  mock com story/how_it_works
+- `src/lib/presell-blocks.ts` — PresellType, label, defaultOrderFor, samplePresell,
+  typeStyles (CSS do formato)
+- `src/routes/_authenticated/presells.new.tsx` — card no TYPE_GROUPS
+
+### Pendente
+- Deploy da edge function `generate-presell` (aguardando validação visual do usuário)
+
+---
+
 ## Sessão 3 (2026-07-05) — 3 grandes atualizações + deploy completo
 
 **Tudo deployado**: front na Vercel (main) + todas as 6 edge functions no Supabase.

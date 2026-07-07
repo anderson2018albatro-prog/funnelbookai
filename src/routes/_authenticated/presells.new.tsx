@@ -50,6 +50,7 @@ const TYPE_GROUPS: TypeGroup[] = [
     types: [
       { value: "review", label: "Review Premium", desc: "Análise completa com pros/cons e FAQ" },
       { value: "story", label: "Narrativa de Transformação", desc: "História pessoal de transformação" },
+      { value: "bridge_story", label: "Bridge Story (Ponte Narrativa)", desc: "História real + transição suave, sem pressão artificial", badge: "Ads-friendly" },
       { value: "advertorial", label: "Advertorial", desc: "Matéria editorial jornalística" },
       { value: "native_ad", label: "Anúncio Nativo", desc: "Artigo patrocinado estilo jornal" },
       { value: "listicle", label: "Listicle (Top Razões)", desc: "\"Top 5 razões por que...\"" },

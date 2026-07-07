@@ -11,7 +11,7 @@ const json = (d: unknown, s = 200) =>
   new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const VALID_TYPES = [
-  "review", "advertorial", "quiz", "comparativo", "bridge", "vsl", "cookie_notice",
+  "review", "advertorial", "quiz", "comparativo", "bridge", "bridge_story", "vsl", "cookie_notice",
   "native_ad", "story", "listicle",
   "age_gate", "gender_gate", "country_gate", "captcha_gate", "coupon", "countdown",
 ];
@@ -76,6 +76,8 @@ function defaultOrderFor(type: string): string[] {
     case "quiz": return ["urgency_bar","topbar","headline","viewers_counter","quiz","testimonials","trust_badges","cta"];
     case "comparativo": return ["urgency_bar","topbar","headline","viewers_counter","comparison","benefits","testimonials","trust_badges","cta","faq"];
     case "bridge": return ["topbar","headline","benefits","testimonials","cookie_notice","cta"];
+    // Ponte narrativa ética: sem urgency_bar, viewers_counter, depoimentos fabricados ou popup
+    case "bridge_story": return ["topbar","headline","story","how_it_works","benefits","cta"];
     case "vsl": return ["urgency_bar","topbar","headline","viewers_counter","video","benefits","testimonials","trust_badges","cta","faq"];
     case "cookie_notice": return ["topbar","headline","cookie_notice","cta"];
     case "native_ad": return ["topbar","headline","author_byline","media","intro","story","what_is","benefits","proof","testimonials","cta","faq","comments"];
@@ -273,11 +275,11 @@ function buildBlocks(
         color: "#25d366",
       },
       urgency_bar: {
-        visible: !isGate && !!p.urgency_bar,
+        visible: !isGate && type !== "bridge_story" && !!p.urgency_bar,
         text: p.urgency_bar ?? "🔥 Atenção: condição especial disponível por tempo limitado",
       },
       viewers_counter: {
-        visible: !isGate && !["cookie_notice", "bridge"].includes(type),
+        visible: !isGate && !["cookie_notice", "bridge", "bridge_story"].includes(type),
         min: 34, max: 97,
       },
       testimonials: {
@@ -441,6 +443,7 @@ Comando extra: ${extra_prompt || "(nenhum)"}`;
         quiz: "3-5 perguntas com 4 opções cada que levem ao produto como solução. Resultado positivo no final.",
         comparativo: "Tabela comparativa com 5-8 features reais vs alternativas. Produto como vencedor claro.",
         bridge: "Direto e minimalista. 3-5 benefícios + cookie_notice transparente.",
+        bridge_story: "Página ponte NARRATIVA e ÉTICA (sem dark patterns, sem pressão artificial). 'story' = hook + descoberta em primeira pessoa; 'how_it_works' = transição suave apresentando o produto sem hype; 'benefits' = 2-3 benefícios reais. CTA honesto que diz exatamente o que faz. Tom: autêntico e conversacional.",
         vsl: "Copy para vídeo de vendas. Suspense na headline. video_url vazio (usuário preencherá).",
         cookie_notice: "Ultra direto. Headline + aviso de redirecionamento + CTA. Nada mais.",
         native_ad: "Artigo patrocinado. 'topbar' = 'Conteúdo Patrocinado'. Tom jornalístico. 'story' = artigo fluido.",
@@ -478,6 +481,16 @@ REGRAS DE QUALIDADE:
 - urgency_bar: frase curta de urgência ética para a barra do topo (sem prazos falsos)
 - author_name/author_role: autor fictício GENÉRICO para matéria (ex: "Carla M.", "Redação Saúde em Foco") — nunca use nome de pessoa real
 ${presell_type === "quiz" ? `- quiz: 3 a 5 perguntas de segmentação/engajamento com 3-4 opções cada (toda opção leva adiante) + result: recomendação final que aponta o produto como solução` : ""}
+${presell_type === "bridge_story" ? `- REGRAS ESPECÍFICAS DO BRIDGE STORY (obrigatórias, têm prioridade sobre as regras gerais acima):
+  - story: 3-4 parágrafos em primeira pessoa — (1) hook narrativo com uma situação/dor REAL do público-alvo, sem clickbait agressivo nem drama exagerado; (2) contexto de como "eu" cheguei até a solução (a descoberta), criando identificação genuína
+  - how_it_works: a transição suave — apresenta o produto de forma natural ("foi aí que conheci..."), 1-2 parágrafos, sem hype exagerado
+  - benefits: EXATAMENTE 2-3 benefícios reais e plausíveis do produto (proibido: promessas milagrosas, curas garantidas, resultados irreais ou com prazo inventado)
+  - cta_text: honesto e específico sobre a ação (ex: "Quero conhecer o método") — NUNCA disfarçado de outra coisa ("continuar", "aceitar", "fechar aviso")
+  - cta_note: deixa claro que o botão leva ao site oficial do produto e que o link pode ser de afiliado
+  - topbar: rótulo de transparência curto, ex: "Conteúdo de parceiro · pode conter links de afiliado"
+  - urgency_bar: retorne string vazia "" (este formato NÃO usa urgência)
+  - headline: curiosidade honesta em tom de história pessoal, sem sensacionalismo
+  - PROIBIDO em qualquer campo: urgência falsa, escassez inventada, prazos fictícios, imitar a página oficial do produtor` : ""}
 ${presell_type === "comparativo" ? `- comparison: 5 a 8 linhas comparando o produto vs alternativa genérica, com winner destacado` : ""}
 - Dentro de strings use \\n para quebra de linha (nunca newline literal)
 
@@ -604,6 +617,8 @@ Deno.serve(async (req) => {
         rating: 4.7, rating_label: "Nota geral",
         intro: `Nesta análise completa de ${niche || "este produto"}, vamos mostrar tudo que você precisa saber antes de decidir.\n\n[MODO MOCK — gerado sem IA para teste]`,
         what_is: `${niche || "Este produto"} é uma solução desenvolvida para ${target_audience || "pessoas que querem resultados"}.`,
+        story: `Eu já tinha tentado de tudo em ${niche || "minha rotina"} e nada parecia funcionar de verdade.\n\nFoi pesquisando por conta própria que encontrei uma abordagem diferente — e resolvi testar sem grandes expectativas.\n\n[MODO MOCK — narrativa de exemplo gerada sem IA]`,
+        how_it_works: `Foi aí que conheci ${niche || "esta solução"}. Sem fórmula mágica: um método simples, aplicado com constância, que fez diferença no meu dia a dia.`,
         for_whom: ["Iniciantes que querem começar do zero", "Quem já tentou outras soluções", "Pessoas que buscam resultados"],
         benefits: ["Resultados em menos de 30 dias", "Suporte 24/7", "Método passo a passo", "Acesso vitalício"],
         pros: ["Fácil de usar", "Suporte rápido", "Garantia de 30 dias"],
