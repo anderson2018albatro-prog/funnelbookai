@@ -71,14 +71,25 @@ export function coverSvg(opts: {
   promise?: string;
   author?: string;
   seed?: string;
+  /** Data URL de imagem de capa (IA ou upload). Layout muda para janela + título abaixo. */
+  imageHref?: string;
 }): string {
   const p = paletteFor(opts.seed || opts.title);
-  const titleLines = wrapText(opts.title, 20, 4);
-  const titleSize = titleLines.length >= 4 ? 72 : titleLines.length === 3 ? 80 : 92;
-  const subLines = wrapText(opts.subtitle ?? "", 42, 3);
+  const hasImage = !!opts.imageHref;
+  const titleLines = wrapText(opts.title, hasImage ? 24 : 20, hasImage ? 3 : 4);
+  const titleSize = hasImage
+    ? (titleLines.length >= 3 ? 58 : titleLines.length === 2 ? 68 : 76)
+    : (titleLines.length >= 4 ? 72 : titleLines.length === 3 ? 80 : 92);
+  const subLines = wrapText(opts.subtitle ?? "", hasImage ? 48 : 42, hasImage ? 2 : 3);
   const promiseLines = wrapText(opts.promise ?? "", 38, 2);
-  const titleY = 480;
-  const subY = titleY + titleLines.length * (titleSize + 8) + 40;
+  const titleY = hasImage ? 950 : 480;
+  const subY = titleY + titleLines.length * (titleSize + 8) + (hasImage ? 30 : 40);
+
+  const imageWindow = hasImage
+    ? `<defs><clipPath id="coverimg"><rect x="90" y="290" width="820" height="540" rx="24"/></clipPath></defs>
+<image href="${opts.imageHref}" x="90" y="290" width="820" height="540" preserveAspectRatio="xMidYMid slice" clip-path="url(#coverimg)"/>
+<rect x="90" y="290" width="820" height="540" rx="24" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="3"/>`
+    : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1414" viewBox="0 0 1000 1414">
 <defs>
@@ -96,6 +107,7 @@ export function coverSvg(opts: {
 <rect width="1000" height="707" fill="url(#shine)"/>
 <rect x="90" y="150" width="120" height="10" rx="5" fill="${p.accent}"/>
 ${promiseLines.length ? `<text font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="30" fill="#ffffff" opacity=".92">${tspans(promiseLines, 92, 220, 42)}</text>` : ""}
+${imageWindow}
 <text font-family="'Segoe UI', Arial, sans-serif" font-weight="800" font-size="${titleSize}" fill="#ffffff" letter-spacing="-1">${tspans(titleLines, 90, titleY, titleSize + 8)}</text>
 ${subLines.length ? `<text font-family="'Segoe UI', Arial, sans-serif" font-size="34" fill="#ffffff" opacity=".85">${tspans(subLines, 92, subY, 46)}</text>` : ""}
 <rect x="0" y="1230" width="1000" height="184" fill="#000000" opacity=".22"/>
@@ -103,6 +115,33 @@ ${subLines.length ? `<text font-family="'Segoe UI', Arial, sans-serif" font-size
 ${opts.author ? `<text x="92" y="1310" font-family="'Segoe UI', Arial, sans-serif" font-weight="700" font-size="34" fill="#ffffff">${esc(opts.author)}</text>` : ""}
 <text x="92" y="${opts.author ? 1358 : 1320}" font-family="'Segoe UI', Arial, sans-serif" font-size="22" fill="#ffffff" opacity=".7">E-BOOK EXCLUSIVO</text>
 </svg>`;
+}
+
+/** Baixa uma imagem (ex.: Supabase Storage) e devolve como data URL — evita
+ *  canvas "tainted" ao rasterizar SVG e permite embutir no jsPDF. */
+export function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  return fetch(url)
+    .then((res) => (res.ok ? res.blob() : null))
+    .then((blob) => {
+      if (!blob) return null;
+      return new Promise<string | null>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => resolve(null);
+        r.readAsDataURL(blob);
+      });
+    })
+    .catch(() => null);
+}
+
+/** Dimensões naturais de uma imagem (data URL ou URL). */
+export function imageDimensions(src: string): Promise<{ w: number; h: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height });
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
 
 /** Ícones decorativos simples por índice de capítulo. */

@@ -1,5 +1,58 @@
 # PROGRESS — FunnelBook AI
 
+## Sessão 6 (2026-07-07) — Ebook visual profissional com ilustrações por IA
+
+### O que foi implementado
+1. **Ilustrações reais por capítulo (Gemini imagem)** — na edge function
+   `generate-ebook`, cada capítulo dispara em PARALELO com o texto uma geração
+   de imagem (`gemini-2.5-flash-image`, fallback
+   `gemini-2.0-flash-preview-image-generation`, timeout 45s) a partir do
+   `image_description` que a IA já planejava. A imagem sobe pro novo bucket
+   público `ebook-assets` (`{user_id}/{ebook_id}/ch-N.png`) e a URL fica em
+   `chapters[i].image_url`. **Falha de imagem nunca trava o ebook** — só pula
+   aquela imagem (logs: "Gerando ilustração do capítulo 3...", "Erro ao gerar
+   imagem do capítulo 3, pulando...", "ilustrações prontas: X/Y").
+2. **Capa profissional com imagem** — a IA também gera uma imagem de capa
+   (`cover_image_url`); o `coverSvg` ganhou layout com janela de imagem
+   arredondada + título abaixo (tipografia grande, paleta por hash do título,
+   já existente). No editor há botão "Imagem de capa" para **upload manual**
+   (bucket `ebook-assets`), que substitui a gerada.
+3. **Design do PDF** (client-side, jsPDF):
+   - Contraste tipográfico: títulos Helvetica bold coloridos (paleta) +
+     corpo em **Times serifada** 11.5/17 + legendas em itálico
+   - **Cabeçalho** com título do livro + linha na cor da paleta (pág. 3+) e
+     rodapé com autor + numeração (já existia, mantido)
+   - **Sumário clicável com pontilhado** entre título e nº da página
+   - **Ilustração no início de cada capítulo** (proporção preservada, máx.
+     280pt, centralizada, legenda opcional = image_description) + banner
+     decorativo SVG como fallback quando não há imagem
+   - **Separador visual** (`dividerSvg`, que existia e não era usado) no fim
+     de cada capítulo
+   - Capa embute a imagem via data URL (evita canvas tainted por CORS)
+4. **Robustez**: jsonrepair mantido; imagens não consomem tokens de LLM
+   (API separada), limites de token inalterados (esqueleto 4000 / capítulo
+   2200); tudo que falha em imagem é log + skip, nunca erro fatal.
+
+### Banco (aplicado no remoto via Management API)
+- Bucket `ebook-assets` público + policies RLS — migration
+  `supabase/migrations/20260707230000_ebook_assets_bucket.sql`
+
+### Arquivos alterados
+- `supabase/functions/generate-ebook/index.ts` — geração/upload de ilustrações
+- `src/lib/ebook-art.ts` — `coverSvg({imageHref})`, `fetchImageAsDataUrl`,
+  `imageDimensions`
+- `src/routes/_authenticated/ebooks.$id.tsx` — PDF redesign + upload de capa +
+  preview das ilustrações no editor
+
+### Deploy necessário
+```
+npx supabase functions deploy generate-ebook --project-ref nygbgczhydtzyfgbqwkr --use-api
+# Front (SEM integração git — deploy manual):
+npx vercel deploy --prod --yes
+```
+
+---
+
 ## Sessão 5 (2026-07-07) — Construtor de Página de Vendas via CHAT
 
 O usuário conversa com a IA, descreve o que quer na página (textos, seções,

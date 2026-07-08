@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { jsPDF } from "jspdf";
-import { chapterBannerSvg, coverSvg, paletteFor, svgDataUrl, svgToPngDataUrl } from "@/lib/ebook-art";
+import { chapterBannerSvg, coverSvg, dividerSvg, fetchImageAsDataUrl, imageDimensions, paletteFor, svgDataUrl, svgToPngDataUrl } from "@/lib/ebook-art";
 
 function hexToRgb(hex: string): [number, number, number] {
   const m = hex.replace("#", "");
@@ -32,12 +32,14 @@ type EbookChapter = {
   content: string;
   acao_pratica?: string;
   image_description?: string;
+  image_url?: string;
 };
 
 type EbookContent = {
   title?: string;
   subtitle?: string;
   cover_promise?: string;
+  cover_image_url?: string;
   autor?: string;
   introduction?: string;
   summary?: string[];
@@ -65,6 +67,7 @@ function normalizeEbookContent(raw: unknown): EbookContent {
         content: String(ch?.content ?? ch?.conteudo ?? ch?.text ?? ch?.body ?? ""),
         acao_pratica: String(ch?.acao_pratica ?? ch?.practical_action ?? ""),
         image_description: String(ch?.image_description ?? ""),
+        image_url: String(ch?.image_url ?? ""),
       }))
     : [];
 
@@ -75,6 +78,7 @@ function normalizeEbookContent(raw: unknown): EbookContent {
     title: obj.title ?? obj.titulo,
     subtitle: obj.subtitle ?? obj.subtitulo,
     cover_promise: obj.cover_promise ?? "",
+    cover_image_url: String(obj.cover_image_url ?? ""),
     autor: obj.autor ?? obj.author ?? obj.briefing?.autor ?? "",
     introduction: typeof introduction === "string" ? introduction : "",
     summary: asArray(obj.summary ?? obj.sumario ?? obj.indice),
@@ -154,6 +158,17 @@ function EbookDetail() {
 
   const ec = editedContent ?? c;
 
+  // Imagem de capa (IA ou upload) embutida como data URL para o preview SVG e o PDF
+  const [coverEmbed, setCoverEmbed] = useState<string | null>(null);
+  const coverFileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const url = ec.cover_image_url;
+    if (!url) { setCoverEmbed(null); return; }
+    let alive = true;
+    fetchImageAsDataUrl(url).then((d) => { if (alive) setCoverEmbed(d); });
+    return () => { alive = false; };
+  }, [ec.cover_image_url]);
+
   function updateChapter(i: number, field: "title" | "content" | "acao_pratica", val: string) {
     setEditedContent((prev) => {
       const chapters = [...(prev?.chapters ?? [])];
@@ -220,6 +235,20 @@ function EbookDetail() {
       toast.success("Excluído");
       navigate({ to: "/ebooks" });
     } catch (e: any) { toast.error(e.message); setBusy(null); }
+  }
+
+  async function uploadCover(file: File) {
+    if (!file.type.startsWith("image/")) { toast.error("Envie um arquivo de imagem"); return; }
+    if (file.size > 8 * 1024 * 1024) { toast.error("Imagem muito grande (máx. 8MB)"); return; }
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) { toast.error("Sessão expirada"); return; }
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${u.user.id}/${id}/cover-upload-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("ebook-assets").upload(path, file, { upsert: true });
+    if (error) { toast.error(error.message); return; }
+    const { data } = supabase.storage.from("ebook-assets").getPublicUrl(path);
+    setEditedContent((p) => ({ ...p, cover_image_url: data.publicUrl }));
+    toast.success("Imagem de capa enviada — clique em Salvar para gravar");
   }
 
   async function generateSales() {
@@ -295,18 +324,60 @@ function EbookDetail() {
         doc.setTextColor(0);
         y += lines.length * 18 + 6;
       }
+      // Corpo em serifa (Times) — contraste tipográfico com títulos em sans bold
       function writeParagraph(text: string) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(11);
+        doc.setFont("times", "normal");
+        doc.setFontSize(11.5);
         const clean = text.replace(/\n/g, " ").trim();
         if (!clean) return;
         const lines = doc.splitTextToSize(clean, maxW) as string[];
         for (const line of lines) {
-          ensure(16);
+          ensure(17);
           doc.text(line, margin, y);
-          y += 16;
+          y += 17;
         }
         y += 10;
+      }
+      function writeCaption(text: string) {
+        if (!text) return;
+        ensure(16);
+        doc.setFont("times", "italic");
+        doc.setFontSize(9.5);
+        doc.setTextColor(120);
+        const lines = doc.splitTextToSize(text, maxW - 80) as string[];
+        for (const line of lines) {
+          doc.text(line, pageW / 2, y, { align: "center" });
+          y += 13;
+        }
+        doc.setTextColor(0);
+        y += 8;
+      }
+      // Ilustração centralizada, proporção preservada, com legenda opcional
+      async function writeIllustration(url: string, caption?: string) {
+        try {
+          const dataUrl = await fetchImageAsDataUrl(url);
+          if (!dataUrl) return;
+          const dim = await imageDimensions(dataUrl);
+          if (!dim || !dim.w || !dim.h) return;
+          let w = maxW, h = (w * dim.h) / dim.w;
+          const maxH = 280;
+          if (h > maxH) { h = maxH; w = (h * dim.w) / dim.h; }
+          ensure(h + 24);
+          const fmt = dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+          doc.addImage(dataUrl, fmt, margin + (maxW - w) / 2, y, w, h);
+          y += h + 10;
+          if (caption) writeCaption(caption);
+        } catch (e) {
+          console.warn("[downloadPDF] ilustração pulada:", url, e);
+        }
+      }
+      async function writeDivider() {
+        const png = await svgToPngDataUrl(dividerSvg(bookTitle), 1200, 40);
+        if (!png) return;
+        const h = Math.round((maxW * 40) / 1200);
+        ensure(h + 20);
+        doc.addImage(png, "PNG", margin, y, maxW, h);
+        y += h + 14;
       }
       // Corpo com suporte a subtítulos "### " (hierarquia tipográfica)
       function writeBody(text: string) {
@@ -363,9 +434,14 @@ function EbookDetail() {
         y += boxH + 16;
       }
 
-      // ── Página 1: capa gerada por código (gradiente + tipografia) ─────────
+      // ── Página 1: capa (gradiente + tipografia + imagem IA/upload se houver) ─
+      let coverEmbed: string | undefined;
+      if (ec.cover_image_url) {
+        coverEmbed = (await fetchImageAsDataUrl(ec.cover_image_url)) ?? undefined;
+        if (!coverEmbed) console.warn("[downloadPDF] imagem de capa indisponível, usando capa tipográfica");
+      }
       const coverPng = await svgToPngDataUrl(
-        coverSvg({ title: bookTitle, subtitle: ec.subtitle, promise: ec.cover_promise, author, seed: bookTitle }),
+        coverSvg({ title: bookTitle, subtitle: ec.subtitle, promise: ec.cover_promise, author, seed: bookTitle, imageHref: coverEmbed }),
         1000, 1414,
       );
       if (coverPng) {
@@ -410,9 +486,13 @@ function EbookDetail() {
         } else {
           writeHeading(`Capítulo ${i + 1}: ${ch?.title ?? ""}`, 20);
         }
+        // Ilustração real do capítulo (gerada por IA) — se falhar, o banner acima já cobre
+        if (ch?.image_url) await writeIllustration(ch.image_url, ch?.image_description);
         const chContent = String(ch?.content ?? "").trim();
         if (chContent) writeBody(chContent);
         if (ch?.acao_pratica) writeActionBox(ch.acao_pratica);
+        // Separador visual no fim do capítulo (não só quebra de página seca)
+        await writeDivider();
       }
       if (ec.conclusion) {
         newPage();
@@ -444,20 +524,45 @@ function EbookDetail() {
       ty += 44;
       doc.setFontSize(11.5);
       for (const entry of toc) {
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         const label = entry.label.length > 70 ? entry.label.slice(0, 69) + "…" : entry.label;
+        const pageStr = String(entry.page - 1);
         doc.text(label, margin, ty);
-        doc.text(String(entry.page - 1), pageW - margin, ty, { align: "right" });
+        // Pontilhado entre o título e o número da página
+        const labelW = doc.getTextWidth(label);
+        const pageStrW = doc.getTextWidth(pageStr);
+        const dotStart = margin + labelW + 6;
+        const dotEnd = pageW - margin - pageStrW - 8;
+        if (dotEnd > dotStart + 10) {
+          doc.setTextColor(170);
+          let dots = ".";
+          while (doc.getTextWidth(dots + " .") < dotEnd - dotStart) dots += " .";
+          doc.text(dots, dotStart, ty);
+          doc.setTextColor(0);
+        }
+        doc.text(pageStr, pageW - margin, ty, { align: "right" });
         // linha inteira clicável → página de destino
         doc.link(margin, ty - 11, maxW, 15, { pageNumber: entry.page });
         ty += 21;
         if (ty > pageH - margin) break;
       }
 
-      // ── Rodapé: numeração + autor em todas as páginas internas ───────────
+      // ── Cabeçalho e rodapé em todas as páginas internas ───────────────────
       const total = doc.getNumberOfPages();
+      const headerTitle = bookTitle.toUpperCase().slice(0, 64);
       for (let p = 2; p <= total; p++) {
         doc.setPage(p);
+        // Cabeçalho (a partir da página 3 — o sumário fica limpo)
+        if (p >= 3) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7.5);
+          doc.setTextColor(150);
+          doc.text(headerTitle, margin, 30);
+          doc.setDrawColor(pr, pg, pb);
+          doc.setLineWidth(0.8);
+          doc.line(margin, 38, pageW - margin, 38);
+        }
+        // Rodapé: autor + número da página
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
         doc.setTextColor(130);
@@ -514,11 +619,18 @@ function EbookDetail() {
         <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-elegant">
           <div className="flex gap-4">
             {renderable && (
-              <img
-                src={svgDataUrl(coverSvg({ title: ec.title ?? title, subtitle: ec.subtitle, promise: ec.cover_promise, author: ec.autor, seed: ec.title ?? title }))}
-                alt="Capa do ebook"
-                className="hidden w-24 shrink-0 rounded-lg shadow-md sm:block"
-              />
+              <div className="hidden shrink-0 flex-col items-center gap-1.5 sm:flex">
+                <img
+                  src={svgDataUrl(coverSvg({ title: ec.title ?? title, subtitle: ec.subtitle, promise: ec.cover_promise, author: ec.autor, seed: ec.title ?? title, imageHref: coverEmbed ?? undefined }))}
+                  alt="Capa do ebook"
+                  className="w-24 rounded-lg shadow-md"
+                />
+                <input ref={coverFileRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCover(f); e.target.value = ""; }} />
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => coverFileRef.current?.click()}>
+                  <Upload className="mr-1 h-3 w-3" /> Imagem de capa
+                </Button>
+              </div>
             )}
             <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -606,14 +718,22 @@ function EbookDetail() {
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => moveChapter(i, 1)} disabled={i === (ec.chapters?.length ?? 0) - 1}><ChevronDown className="h-3 w-3" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeChapter(i)}><X className="h-3 w-3" /></Button>
                     </div>
-                    {ch.title && (
+                    {(ch as any).image_url ? (
+                      <img
+                        src={(ch as any).image_url}
+                        alt={ch.title}
+                        className="mb-3 w-full rounded-lg object-cover"
+                        style={{ height: 180 }}
+                        loading="lazy"
+                      />
+                    ) : ch.title ? (
                       <img
                         src={svgDataUrl(chapterBannerSvg({ index: i, title: ch.title, imageDescription: (ch as any).image_description, seed: ec.title ?? title }))}
                         alt={ch.title}
                         className="mb-3 w-full rounded-lg object-cover"
                         style={{ height: 160 }}
                       />
-                    )}
+                    ) : null}
                     <Textarea
                       rows={6}
                       value={ch.content}

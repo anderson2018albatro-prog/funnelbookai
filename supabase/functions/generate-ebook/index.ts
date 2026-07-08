@@ -126,6 +126,105 @@ async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3): Pr
   throw lastErr ?? new Error("Falha na IA");
 }
 
+// ── Ilustrações via Gemini (imagem) ─────────────────────────────────────────
+// Paleta espelhada de src/lib/ebook-art.ts: dá consistência visual entre a
+// arte programática (capa/banners SVG) e as ilustrações geradas por IA.
+const ART_PALETTES = [
+  { name: "indigo", from: "#4f46e5", to: "#7c3aed", accent: "#fbbf24" },
+  { name: "ocean", from: "#0369a1", to: "#0891b2", accent: "#fde047" },
+  { name: "emerald", from: "#047857", to: "#0d9488", accent: "#fef08a" },
+  { name: "sunset", from: "#b91c1c", to: "#ea580c", accent: "#fef9c3" },
+  { name: "royal", from: "#1e3a8a", to: "#6d28d9", accent: "#f472b6" },
+  { name: "wine", from: "#831843", to: "#be185d", accent: "#fbbf24" },
+  { name: "forest", from: "#14532d", to: "#3f6212", accent: "#fde68a" },
+  { name: "slate", from: "#0f172a", to: "#334155", accent: "#38bdf8" },
+];
+function paletteFor(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return ART_PALETTES[Math.abs(h) % ART_PALETTES.length];
+}
+
+const IMAGE_MODELS = ["gemini-2.5-flash-image", "gemini-2.0-flash-preview-image-generation"];
+
+// Gera uma ilustração e retorna os bytes PNG/JPEG, ou null em falha (nunca lança)
+async function generateIllustration(geminiKey: string, prompt: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  for (const model of IMAGE_MODELS) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 45_000);
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+          }),
+          signal: ctrl.signal,
+        },
+      );
+      clearTimeout(t);
+      if (!res.ok) {
+        const errTxt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errTxt.slice(0, 160)}`);
+      }
+      const j = await res.json();
+      const part = (j.candidates?.[0]?.content?.parts ?? []).find((p: any) => p.inlineData?.data);
+      if (!part) throw new Error("resposta sem imagem");
+      const b64 = String(part.inlineData.data);
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      return { bytes, mime: String(part.inlineData.mimeType || "image/png") };
+    } catch (e) {
+      console.warn(`[generate-ebook] modelo de imagem ${model} falhou: ${(e as Error).message}`);
+    }
+  }
+  return null;
+}
+
+function illustrationPrompt(desc: string, tema: string, paletteName: string): string {
+  return `Crie uma ilustração digital editorial moderna, estilo flat design premium, para um ebook sobre "${tema}".
+Cena: ${desc}.
+Paleta de cores predominante: tons de ${paletteName}.
+REGRAS: nenhum texto, nenhuma letra, nenhum número, nenhuma marca d'água na imagem. Composição limpa, formato paisagem 3:2, aparência profissional de livro.`;
+}
+
+// Gera + faz upload; retorna URL pública ou null (nunca lança)
+async function makeIllustration(opts: {
+  admin: ReturnType<typeof createClient>;
+  geminiKey: string;
+  path: string;
+  desc: string;
+  tema: string;
+  paletteName: string;
+  label: string;
+}): Promise<string | null> {
+  const { admin, geminiKey, path, desc, tema, paletteName, label } = opts;
+  try {
+    console.log(`[generate-ebook] Gerando ilustração ${label}...`);
+    const img = await generateIllustration(geminiKey, illustrationPrompt(desc, tema, paletteName));
+    if (!img) {
+      console.warn(`[generate-ebook] Erro ao gerar imagem ${label}, pulando...`);
+      return null;
+    }
+    const ext = img.mime.includes("jpeg") ? "jpg" : "png";
+    const fullPath = `${path}.${ext}`;
+    const { error: upErr } = await admin.storage.from("ebook-assets")
+      .upload(fullPath, new Blob([img.bytes], { type: img.mime }), { contentType: img.mime, upsert: true });
+    if (upErr) {
+      console.warn(`[generate-ebook] Upload da imagem ${label} falhou (${upErr.message}), pulando...`);
+      return null;
+    }
+    const { data: pub } = admin.storage.from("ebook-assets").getPublicUrl(fullPath);
+    console.log(`[generate-ebook] Ilustração ${label} pronta: ${pub.publicUrl}`);
+    return pub.publicUrl;
+  } catch (e) {
+    console.warn(`[generate-ebook] Erro ao gerar imagem ${label}, pulando... (${(e as Error).message})`);
+    return null;
+  }
+}
+
 type OutlineChapter = { title: string; sections: string[]; image_description: string };
 type Outline = {
   title: string;
@@ -272,6 +371,24 @@ async function processInBackground(opts: {
       content: baseContent,
     }).eq("id", ebookId);
 
+    // Ilustrações (Gemini): rodam em PARALELO com a geração de texto e são
+    // anexadas ao final. Qualquer falha de imagem apenas pula aquela imagem —
+    // o ebook continua sendo gerado normalmente.
+    const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+    const palette = paletteFor(outline.title ?? briefing.tema ?? "ebook");
+    const artBase = `${userId}/${ebookId}`;
+    const chapterImageTasks: Promise<string | null>[] = [];
+    let coverImageTask: Promise<string | null> = Promise.resolve(null);
+    if (geminiKey) {
+      coverImageTask = makeIllustration({
+        admin, geminiKey, path: `${artBase}/cover`,
+        desc: `Imagem de capa conceitual sobre: ${outline.cover_promise || outline.subtitle || briefing.tema}. Público: ${briefing.publico_alvo}`,
+        tema: briefing.tema, paletteName: palette.name, label: "da capa",
+      });
+    } else {
+      console.log("[generate-ebook] GEMINI_API_KEY ausente — ebook será gerado sem ilustrações (usa arte SVG do app)");
+    }
+
     // Fase 2: capítulo por capítulo, com retry e progresso salvo a cada capítulo
     const failed: number[] = [];
     for (let i = 0; i < outline.chapters.length; i++) {
@@ -298,6 +415,33 @@ async function processInBackground(opts: {
       baseContent.progress = { done: i + 1, total: outline.chapters.length };
       // Salva progresso parcial — nada se perde se a próxima chamada falhar
       await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+      // Dispara a ilustração deste capítulo em paralelo (não bloqueia o texto)
+      chapterImageTasks.push(
+        geminiKey
+          ? makeIllustration({
+            admin, geminiKey, path: `${artBase}/ch-${i + 1}`,
+            desc: plan.image_description || plan.title,
+            tema: briefing.tema, paletteName: palette.name, label: `do capítulo ${i + 1}`,
+          })
+          : Promise.resolve(null),
+      );
+    }
+
+    // Anexa as ilustrações que ficaram prontas (falhas viram null e são puladas)
+    if (geminiKey) {
+      console.log("[generate-ebook] aguardando ilustrações...");
+      const [coverRes, ...chapterRes] = await Promise.allSettled([coverImageTask, ...chapterImageTasks]);
+      const coverUrl = coverRes.status === "fulfilled" ? coverRes.value : null;
+      if (coverUrl) baseContent.cover_image_url = coverUrl;
+      let okCount = coverUrl ? 1 : 0;
+      chapterRes.forEach((r, i) => {
+        const url = r.status === "fulfilled" ? r.value : null;
+        if (url && baseContent.chapters[i]) {
+          baseContent.chapters[i].image_url = url;
+          okCount++;
+        }
+      });
+      console.log(`[generate-ebook] ilustrações prontas: ${okCount}/${chapterImageTasks.length + 1}`);
     }
 
     const { error: updErr } = await admin
