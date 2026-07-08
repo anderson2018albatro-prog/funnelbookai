@@ -145,11 +145,34 @@ function paletteFor(seed: string) {
   return ART_PALETTES[Math.abs(h) % ART_PALETTES.length];
 }
 
-const IMAGE_MODELS = ["gemini-2.5-flash-image", "gemini-2.0-flash-preview-image-generation"];
+const IMAGE_MODELS = ["gemini-2.5-flash-image"];
+
+// Fallback SEM chave: Pollinations.ai (gratuito). Usado quando o Gemini não
+// tem cota de imagem (free tier retorna 429 para modelos de imagem).
+async function generatePollinationsImage(prompt: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 75_000);
+    const seed = Math.floor(Math.random() * 1_000_000);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.slice(0, 900))}?width=1216&height=832&nologo=true&seed=${seed}`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const mime = res.headers.get("content-type") ?? "image/jpeg";
+    if (!mime.startsWith("image/")) throw new Error(`tipo inesperado: ${mime}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length < 5_000) throw new Error("imagem muito pequena (provável erro)");
+    return { bytes, mime };
+  } catch (e) {
+    console.warn(`[generate-ebook] Pollinations falhou: ${(e as Error).message}`);
+    return null;
+  }
+}
 
 // Gera uma ilustração e retorna os bytes PNG/JPEG, ou null em falha (nunca lança)
+// Ordem: Gemini (se houver cota de imagem) → Pollinations (gratuito, sem chave)
 async function generateIllustration(geminiKey: string, prompt: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  for (const model of IMAGE_MODELS) {
+  for (const model of geminiKey ? IMAGE_MODELS : []) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 45_000);
@@ -180,14 +203,16 @@ async function generateIllustration(geminiKey: string, prompt: string): Promise<
       console.warn(`[generate-ebook] modelo de imagem ${model} falhou: ${(e as Error).message}`);
     }
   }
-  return null;
+  return await generatePollinationsImage(prompt);
 }
 
 function illustrationPrompt(desc: string, tema: string, paletteName: string): string {
-  return `Crie uma ilustração digital editorial moderna, estilo flat design premium, para um ebook sobre "${tema}".
-Cena: ${desc}.
-Paleta de cores predominante: tons de ${paletteName}.
-REGRAS: nenhum texto, nenhuma letra, nenhum número, nenhuma marca d'água na imagem. Composição limpa, formato paisagem 3:2, aparência profissional de livro.`;
+  // Em inglês: modelos de imagem (Gemini e Flux/Pollinations) seguem melhor.
+  // A cena (desc) vem em português da IA de texto e é compreendida normalmente.
+  return `Professional modern flat editorial illustration for a book about "${tema}".
+Scene: ${desc}.
+Predominant color palette: ${paletteName} tones.
+STRICT RULES: absolutely no text, no letters, no numbers, no watermark, no logo in the image. Clean composition, premium book aesthetic, landscape 3:2.`;
 }
 
 // Gera + faz upload; retorna URL pública ou null (nunca lança)
@@ -295,8 +320,8 @@ ${prevTitles}
 ESTRUTURA OBRIGATÓRIA do campo "content":
 1. Abra com um storytelling curto (1-2 parágrafos): uma mini-história, cena ou caso real que conecta com o tema do capítulo.
 2. Depois, cada seção: comece a seção com o subtítulo prefixado por "### " (ex: "### ${ch.sections[0] ?? "Subtítulo"}"), seguido de 2-4 parágrafos de conteúdo rico.
-3. Inclua pelo menos 1 exemplo prático brasileiro e dicas concretas para "${briefing.publico_alvo}".
-4. Total: 500 a 800 palavras. Parágrafos separados por \\n\\n.
+3. Inclua pelo menos 2 exemplos práticos brasileiros, dicas concretas e, quando couber, números/dados que tornem o texto convincente para "${briefing.publico_alvo}".
+4. Total: 900 a 1300 palavras — capítulo COMPLETO e aprofundado, não um resumo. Cada seção com 3-5 parágrafos ricos. Parágrafos separados por \\n\\n.
 
 ${qualityRules(briefing.idioma)}
 
@@ -377,17 +402,14 @@ async function processInBackground(opts: {
     const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
     const palette = paletteFor(outline.title ?? briefing.tema ?? "ebook");
     const artBase = `${userId}/${ebookId}`;
+    // Ilustrações não dependem de chave: Gemini com cota → melhor qualidade;
+    // sem cota/chave → Pollinations.ai (gratuito, sem chave)
     const chapterImageTasks: Promise<string | null>[] = [];
-    let coverImageTask: Promise<string | null> = Promise.resolve(null);
-    if (geminiKey) {
-      coverImageTask = makeIllustration({
-        admin, geminiKey, path: `${artBase}/cover`,
-        desc: `Imagem de capa conceitual sobre: ${outline.cover_promise || outline.subtitle || briefing.tema}. Público: ${briefing.publico_alvo}`,
-        tema: briefing.tema, paletteName: palette.name, label: "da capa",
-      });
-    } else {
-      console.log("[generate-ebook] GEMINI_API_KEY ausente — ebook será gerado sem ilustrações (usa arte SVG do app)");
-    }
+    const coverImageTask: Promise<string | null> = makeIllustration({
+      admin, geminiKey, path: `${artBase}/cover`,
+      desc: `Imagem de capa conceitual sobre: ${outline.cover_promise || outline.subtitle || briefing.tema}. Público: ${briefing.publico_alvo}`,
+      tema: briefing.tema, paletteName: palette.name, label: "da capa",
+    });
 
     // Fase 2: capítulo por capítulo, com retry e progresso salvo a cada capítulo
     const failed: number[] = [];
@@ -395,7 +417,7 @@ async function processInBackground(opts: {
       const plan = outline.chapters[i];
       try {
         console.log(`[generate-ebook] fase 2: capítulo ${i + 1}/${outline.chapters.length}`, ebookId);
-        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 2200);
+        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 3600);
         baseContent.chapters.push({
           title: plan.title,
           content: String(ch.content ?? ""),
@@ -416,33 +438,27 @@ async function processInBackground(opts: {
       // Salva progresso parcial — nada se perde se a próxima chamada falhar
       await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
       // Dispara a ilustração deste capítulo em paralelo (não bloqueia o texto)
-      chapterImageTasks.push(
-        geminiKey
-          ? makeIllustration({
-            admin, geminiKey, path: `${artBase}/ch-${i + 1}`,
-            desc: plan.image_description || plan.title,
-            tema: briefing.tema, paletteName: palette.name, label: `do capítulo ${i + 1}`,
-          })
-          : Promise.resolve(null),
-      );
+      chapterImageTasks.push(makeIllustration({
+        admin, geminiKey, path: `${artBase}/ch-${i + 1}`,
+        desc: plan.image_description || plan.title,
+        tema: briefing.tema, paletteName: palette.name, label: `do capítulo ${i + 1}`,
+      }));
     }
 
     // Anexa as ilustrações que ficaram prontas (falhas viram null e são puladas)
-    if (geminiKey) {
-      console.log("[generate-ebook] aguardando ilustrações...");
-      const [coverRes, ...chapterRes] = await Promise.allSettled([coverImageTask, ...chapterImageTasks]);
-      const coverUrl = coverRes.status === "fulfilled" ? coverRes.value : null;
-      if (coverUrl) baseContent.cover_image_url = coverUrl;
-      let okCount = coverUrl ? 1 : 0;
-      chapterRes.forEach((r, i) => {
-        const url = r.status === "fulfilled" ? r.value : null;
-        if (url && baseContent.chapters[i]) {
-          baseContent.chapters[i].image_url = url;
-          okCount++;
-        }
-      });
-      console.log(`[generate-ebook] ilustrações prontas: ${okCount}/${chapterImageTasks.length + 1}`);
-    }
+    console.log("[generate-ebook] aguardando ilustrações...");
+    const [coverRes, ...chapterRes] = await Promise.allSettled([coverImageTask, ...chapterImageTasks]);
+    const coverUrl = coverRes.status === "fulfilled" ? coverRes.value : null;
+    if (coverUrl) baseContent.cover_image_url = coverUrl;
+    let okCount = coverUrl ? 1 : 0;
+    chapterRes.forEach((r, i) => {
+      const url = r.status === "fulfilled" ? r.value : null;
+      if (url && baseContent.chapters[i]) {
+        baseContent.chapters[i].image_url = url;
+        okCount++;
+      }
+    });
+    console.log(`[generate-ebook] ilustrações prontas: ${okCount}/${chapterImageTasks.length + 1}`);
 
     const { error: updErr } = await admin
       .from("ebooks")

@@ -1,5 +1,30 @@
 # PROGRESS — FunnelBook AI
 
+## Sessão 6.1 (2026-07-07) — Correção: ilustrações do ebook não geravam
+
+**Diagnóstico via logs da edge function**: o texto SEMPRE gerou normalmente
+(ebook real das 21:42 tem 30k chars em 7 capítulos — o "sem conteúdo" era o
+ebook do botão 🧪 modo teste, que é mock de propósito). As IMAGENS falhavam
+100%: `gemini-2.5-flash-image` → 429 (chave free tier sem cota de imagem) e o
+modelo de fallback → 404 (descontinuado).
+
+**Correções (generate-ebook):**
+- Novo fallback de imagem **Pollinations.ai** (gratuito, SEM chave): Gemini
+  primeiro (se houver cota) → Pollinations (flux, 1216×832, nologo, timeout
+  75s). Pipeline verificado de ponta a ponta: geração → upload no bucket →
+  URL pública servindo (script de verificação em scratchpad)
+- Ilustrações não dependem mais de GEMINI_API_KEY para existir
+- Prompt de imagem em inglês (Gemini e Flux seguem melhor), cena em PT
+- Capítulos mais completos: 900–1300 palavras (antes 500–800), 2+ exemplos
+  brasileiros, maxTokens 2200 → 3600
+- Modelo de imagem 404 removido da lista
+
+**Deploy**: `npx supabase functions deploy generate-ebook` (feito). Sem
+mudança de front. Ebooks antigos não ganham imagens retroativamente — gere um
+novo (botão normal, não o 🧪) para ver conteúdo completo + ilustrações.
+
+---
+
 ## Sessão 6 (2026-07-07) — Ebook visual profissional com ilustrações por IA
 
 ### O que foi implementado
