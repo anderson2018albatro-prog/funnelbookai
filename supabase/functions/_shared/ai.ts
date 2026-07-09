@@ -116,12 +116,15 @@ async function callLovable(key: string, messages: Msg[], maxTokens: number): Pro
 // IMPORTANTE: o Pollinations CACHEIA a resposta pelo corpo da requisição — se
 // uma geração truncada entrar no cache, retries com o mesmo prompt recebem o
 // MESMO JSON cortado para sempre. O seed aleatório fura o cache por tentativa.
+// Timeout curto e só 2 tentativas: este é o ÚLTIMO elo da cadeia de
+// provedores — se ele demorar minutos, a edge function chamadora estoura o
+// wall clock antes de conseguir reportar falha limpa ao usuário.
 async function callPollinationsText(messages: Msg[], maxTokens: number): Promise<string> {
   let lastErr: Error | null = null;
-  for (let attempt = 0; attempt <= 2; attempt++) {
+  for (let attempt = 0; attempt <= 1; attempt++) {
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 100_000);
+      const t = setTimeout(() => ctrl.abort(), 45_000);
       const res = await fetch("https://text.pollinations.ai/openai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,7 +145,7 @@ async function callPollinationsText(messages: Msg[], maxTokens: number): Promise
       return c;
     } catch (e) {
       lastErr = e as Error;
-      if (attempt < 2) await sleep(6000 * (attempt + 1));
+      if (attempt < 1) await sleep(4000);
     }
   }
   throw lastErr ?? new Error("Pollinations text: tentativas esgotadas");

@@ -478,6 +478,23 @@ async function processInBackground(opts: {
     const failed: number[] = [];
     for (let i = 0; i < outline.chapters.length; i++) {
       const plan = outline.chapters[i];
+      // Não INICIA capítulo sem orçamento: uma chamada em andamento pode levar
+      // ~100s no pior caso (cadeia de fallbacks) e o controle de deadline não
+      // interrompe chamada em voo. Sem esta trava, o wall clock (~400s) mata o
+      // processo antes da fase final de falha clara + refund rodar.
+      if (Date.now() > deadline - 60_000) {
+        console.warn(`[generate-ebook] sem orçamento de tempo para o capítulo ${i + 1} — marcando como falho`);
+        failed.push(i + 1);
+        baseContent.chapters.push({
+          title: plan.title,
+          content: "",
+          acao_pratica: "",
+          image_description: plan.image_description ?? "",
+          generation_failed: true,
+        });
+        baseContent.progress = { done: i + 1, total: outline.chapters.length };
+        continue;
+      }
       try {
         console.log(`[generate-ebook] fase 2: capítulo ${i + 1}/${outline.chapters.length}`, ebookId);
         const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 5000, 3, deadline, validateChapter);
