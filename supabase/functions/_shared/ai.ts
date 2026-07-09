@@ -110,6 +110,44 @@ async function callLovable(key: string, messages: Msg[], maxTokens: number): Pro
   throw new Error(`Lovable ${res.status}: ${t.slice(0, 300)}`);
 }
 
+// Último recurso SEM chave: Pollinations text (OpenAI-compatible, gratuito).
+// Qualidade menor que os provedores principais, mas mantém o SaaS gerando
+// quando todas as cotas esgotam (ex.: Gemini free tier tem limite diário baixo).
+// IMPORTANTE: o Pollinations CACHEIA a resposta pelo corpo da requisição — se
+// uma geração truncada entrar no cache, retries com o mesmo prompt recebem o
+// MESMO JSON cortado para sempre. O seed aleatório fura o cache por tentativa.
+async function callPollinationsText(messages: Msg[], maxTokens: number): Promise<string> {
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 100_000);
+      const res = await fetch("https://text.pollinations.ai/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "openai",
+          messages,
+          max_tokens: maxTokens,
+          response_format: { type: "json_object" },
+          seed: Math.floor(Math.random() * 1_000_000_000),
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const j = await res.json();
+      const c = j.choices?.[0]?.message?.content ?? "";
+      if (!c) throw new Error("resposta vazia");
+      return c;
+    } catch (e) {
+      lastErr = e as Error;
+      if (attempt < 2) await sleep(6000 * (attempt + 1));
+    }
+  }
+  throw lastErr ?? new Error("Pollinations text: tentativas esgotadas");
+}
+
 export async function chatCompletion(messages: Msg[], maxTokens = 4096): Promise<string> {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
@@ -138,8 +176,9 @@ export async function chatCompletion(messages: Msg[], maxTokens = 4096): Promise
     catch (e) { errs.push(`OpenAI: ${(e as Error).message}`); }
   }
 
-  if (!anthropicKey && !lovableKey && !geminiKey && !openaiKey) {
-    throw new Error("Nenhuma chave de IA configurada. Configure ANTHROPIC_API_KEY (Claude Fable 5), GEMINI_API_KEY (gratuito) ou OPENAI_API_KEY.");
-  }
+  // Fallback final gratuito e sem chave — nunca deixa o produto sem gerar
+  try { return await callPollinationsText(messages, maxTokens); }
+  catch (e) { errs.push(`PollinationsText: ${(e as Error).message}`); }
+
   throw new Error(`Falha em todos os provedores:\n${errs.join("\n")}`);
 }

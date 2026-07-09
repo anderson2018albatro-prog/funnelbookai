@@ -163,8 +163,43 @@ function chapterGlyph(i: number, cx: number, cy: number, color: string): string 
   }
 }
 
+/** Glifos temáticos adicionais (escolhidos por palavra-chave do capítulo). */
+function themeGlyph(theme: string, cx: number, cy: number, color: string): string {
+  switch (theme) {
+    case "money": // moeda com cifrão
+      return `<circle cx="${cx}" cy="${cy}" r="44" fill="none" stroke="${color}" stroke-width="6" opacity=".9"/><text x="${cx}" y="${cy + 17}" font-family="'Segoe UI', Arial, sans-serif" font-weight="800" font-size="52" fill="${color}" text-anchor="middle">$</text>`;
+    case "heart": // coração (saúde/bem-estar)
+      return `<path d="M ${cx} ${cy + 34} C ${cx - 50} ${cy - 4} ${cx - 34} ${cy - 44} ${cx - 2} ${cy - 20} C ${cx + 30} ${cy - 46} ${cx + 50} ${cy - 6} ${cx} ${cy + 34} Z" fill="${color}" opacity=".95"/>`;
+    case "clock": // relógio (tempo/rotina/hábito)
+      return `<circle cx="${cx}" cy="${cy}" r="44" fill="none" stroke="${color}" stroke-width="6" opacity=".9"/><path d="M ${cx} ${cy - 26} L ${cx} ${cy} L ${cx + 20} ${cy + 12}" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
+    case "people": // pessoas (público/clientes/comunidade)
+      return `<circle cx="${cx - 18}" cy="${cy - 16}" r="15" fill="${color}"/><path d="M ${cx - 42} ${cy + 40} C ${cx - 42} ${cy + 8} ${cx + 6} ${cy + 8} ${cx + 6} ${cy + 40} Z" fill="${color}"/><circle cx="${cx + 22}" cy="${cy - 20}" r="12" fill="${color}" opacity=".7"/><path d="M ${cx + 4} ${cy + 40} C ${cx + 6} ${cy + 12} ${cx + 44} ${cy + 14} ${cx + 42} ${cy + 40} Z" fill="${color}" opacity=".7"/>`;
+    case "alert": // triângulo de alerta (erros/riscos/obstáculos)
+      return `<path d="M ${cx} ${cy - 44} L ${cx + 46} ${cy + 36} L ${cx - 46} ${cy + 36} Z" fill="none" stroke="${color}" stroke-width="7" stroke-linejoin="round"/><line x1="${cx}" y1="${cy - 16}" x2="${cx}" y2="${cy + 12}" stroke="${color}" stroke-width="7" stroke-linecap="round"/><circle cx="${cx}" cy="${cy + 26}" r="4.5" fill="${color}"/>`;
+    case "book": // livro aberto (método/aprendizado/plano)
+      return `<path d="M ${cx} ${cy - 26} C ${cx - 14} ${cy - 36} ${cx - 40} ${cy - 34} ${cx - 46} ${cy - 28} L ${cx - 46} ${cy + 30} C ${cx - 36} ${cy + 24} ${cx - 12} ${cy + 26} ${cx} ${cy + 36} C ${cx + 12} ${cy + 26} ${cx + 36} ${cy + 24} ${cx + 46} ${cy + 30} L ${cx + 46} ${cy - 28} C ${cx + 40} ${cy - 34} ${cx + 14} ${cy - 36} ${cx} ${cy - 26} Z" fill="none" stroke="${color}" stroke-width="6" stroke-linejoin="round"/><line x1="${cx}" y1="${cy - 26}" x2="${cx}" y2="${cy + 36}" stroke="${color}" stroke-width="5"/>`;
+    default:
+      return "";
+  }
+}
+
+/** Mapeia o texto do capítulo (título + descrição) para um glifo temático. */
+const GLYPH_THEMES: [RegExp, string][] = [
+  [/dinheiro|renda|lucro|vend|preç|fatur|investi|financ|custo/i, "money"],
+  [/saúde|saudável|corpo|dieta|peso|aliment|receita|treino|bem-estar|emagre/i, "heart"],
+  [/tempo|rotina|hábito|consistên|diári|agenda|produtiv/i, "clock"],
+  [/cliente|públic|pessoa|famíl|comunidade|audiênc|relacion/i, "people"],
+  [/erro|risco|evit|obstácul|armadilha|cuidado|mito/i, "alert"],
+  [/método|passo|plano|ferramenta|aprend|guia|técnica|estratég/i, "book"],
+];
+function glyphThemeFor(text: string): string | null {
+  for (const [re, theme] of GLYPH_THEMES) if (re.test(text)) return theme;
+  return null;
+}
+
 /**
- * Banner decorativo do capítulo: gradiente, número grande, ícone geométrico
+ * Banner decorativo do capítulo: gradiente, número grande, ícone temático
+ * (escolhido pelo conteúdo do capítulo; genérico por índice como fallback)
  * e a descrição da imagem sugerida pela IA como legenda visual.
  * Dimensões: 1200 × 340.
  */
@@ -191,7 +226,10 @@ export function chapterBannerSvg(opts: {
 <text x="64" y="96" font-family="'Segoe UI', Arial, sans-serif" font-weight="700" font-size="22" letter-spacing="4" fill="${p.accent}">CAPÍTULO ${opts.index + 1}</text>
 <text font-family="'Segoe UI', Arial, sans-serif" font-weight="800" font-size="44" fill="#ffffff">${tspans(titleLines, 64, 160, 54)}</text>
 ${descLines.length ? `<text font-family="Georgia, serif" font-style="italic" font-size="21" fill="#ffffff" opacity=".78">${tspans(descLines, 64, 160 + titleLines.length * 54 + 10, 30)}</text>` : ""}
-${chapterGlyph(opts.index, 1090, 250, "#ffffff")}
+${(() => {
+  const theme = glyphThemeFor(`${opts.title} ${opts.imageDescription ?? ""}`);
+  return theme ? themeGlyph(theme, 1090, 250, "#ffffff") : chapterGlyph(opts.index, 1090, 250, "#ffffff");
+})()}
 </svg>`;
 }
 

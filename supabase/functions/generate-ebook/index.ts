@@ -106,8 +106,37 @@ function qualityRules(idioma: string): string {
 - Exemplos práticos com contexto brasileiro (situações, nomes e realidades do Brasil) quando o idioma for português.`;
 }
 
-// Chamada com retry automático em caso de falha de parse/geração
-async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3): Promise<any> {
+function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+function wordCount(s: unknown): number {
+  return String(s ?? "").trim().split(/\s+/).filter(Boolean).length;
+}
+
+// Piso de aceitação de um capítulo. O prompt pede 900-1300 palavras; abaixo
+// disto o conteúdo veio truncado/raso e é tratado como falha (gera retry).
+const MIN_CHAPTER_WORDS = 300;
+
+function validateChapter(p: any): string | null {
+  const wc = wordCount(p?.content);
+  if (wc < MIN_CHAPTER_WORDS) return `capítulo veio com ${wc} palavras (mínimo ${MIN_CHAPTER_WORDS})`;
+  return null;
+}
+
+function validateOutline(p: any): string | null {
+  if (!String(p?.title ?? "").trim()) return "esqueleto sem título";
+  if (!Array.isArray(p?.chapters) || p.chapters.length === 0) return "esqueleto sem capítulos";
+  const bad = p.chapters.findIndex((c: any) =>
+    !String(c?.title ?? "").trim() || !Array.isArray(c?.sections) || c.sections.length === 0);
+  if (bad >= 0) return `capítulo ${bad + 1} do esqueleto sem título ou sem seções`;
+  if (wordCount(p?.introduction) < 40) return `introdução com apenas ${wordCount(p?.introduction)} palavras`;
+  return null;
+}
+
+// Chamada com retry automático. Rate limit (429) espera MUITO mais — a cota
+// free tier renova por minuto; esperar 1,5s era inútil e derrubava capítulos.
+// deadline: timestamp máximo para não estourar o tempo da edge function.
+// validate: conteúdo que parseia mas vem vazio/raso também conta como falha.
+async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3, deadline = Infinity, validate?: (parsed: any) => string | null): Promise<any> {
   let lastErr: Error | null = null;
   for (let i = 0; i < tries; i++) {
     try {
@@ -116,11 +145,22 @@ async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3): Pr
         { role: "user", content: prompt },
       ], maxTokens);
       if (!content) throw new Error("Resposta vazia da IA");
-      return parseLoose(content);
+      const parsed = parseLoose(content);
+      const problem = validate?.(parsed);
+      if (problem) throw new Error(`Conteúdo reprovado na validação: ${problem}`);
+      return parsed;
     } catch (e) {
       lastErr = e as Error;
-      console.warn(`[generate-ebook] tentativa ${i + 1}/${tries} falhou: ${lastErr.message.slice(0, 200)}`);
-      if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+      const is429 = /429|quota|rate.?limit|resource.?exhausted/i.test(lastErr.message);
+      console.warn(`[generate-ebook] tentativa ${i + 1}/${tries} falhou${is429 ? " (rate limit)" : ""}: ${lastErr.message.slice(0, 200)}`);
+      if (i < tries - 1) {
+        const wait = is429 ? 30_000 * (i + 1) : 1500 * (i + 1);
+        if (Date.now() + wait > deadline) {
+          console.warn("[generate-ebook] deadline próximo — abortando novas tentativas");
+          break;
+        }
+        await sleep(wait);
+      }
     }
   }
   throw lastErr ?? new Error("Falha na IA");
@@ -147,32 +187,41 @@ function paletteFor(seed: string) {
 
 const IMAGE_MODELS = ["gemini-2.5-flash-image"];
 
-// Fallback SEM chave: Pollinations.ai (gratuito). Usado quando o Gemini não
-// tem cota de imagem (free tier retorna 429 para modelos de imagem).
+// Fallback SEM chave: Pollinations.ai (gratuito). Limita requisições
+// concorrentes, então: retry em 429 com espera (a fila sequencial abaixo já
+// evita paralelismo).
 async function generatePollinationsImage(prompt: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 75_000);
-    const seed = Math.floor(Math.random() * 1_000_000);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.slice(0, 900))}?width=1216&height=832&nologo=true&seed=${seed}`;
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(t);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const mime = res.headers.get("content-type") ?? "image/jpeg";
-    if (!mime.startsWith("image/")) throw new Error(`tipo inesperado: ${mime}`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.length < 5_000) throw new Error("imagem muito pequena (provável erro)");
-    return { bytes, mime };
-  } catch (e) {
-    console.warn(`[generate-ebook] Pollinations falhou: ${(e as Error).message}`);
-    return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 75_000);
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.slice(0, 900))}?width=1216&height=832&nologo=true&seed=${seed}`;
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const mime = res.headers.get("content-type") ?? "image/jpeg";
+      if (!mime.startsWith("image/")) throw new Error(`tipo inesperado: ${mime}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length < 5_000) throw new Error("imagem muito pequena (provável erro)");
+      return { bytes, mime };
+    } catch (e) {
+      const msg = (e as Error).message;
+      console.warn(`[generate-ebook] Pollinations tentativa ${attempt + 1}/3 falhou: ${msg}`);
+      if (attempt < 2) await sleep(msg.includes("429") ? 15_000 : 5_000);
+    }
   }
+  return null;
 }
+
+// Estado do run: depois do primeiro 429 do Gemini imagem, para de tentar —
+// cada tentativa perdida consome a MESMA cota free tier que o texto usa.
+type ImgState = { geminiBlocked: boolean };
 
 // Gera uma ilustração e retorna os bytes PNG/JPEG, ou null em falha (nunca lança)
 // Ordem: Gemini (se houver cota de imagem) → Pollinations (gratuito, sem chave)
-async function generateIllustration(geminiKey: string, prompt: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  for (const model of geminiKey ? IMAGE_MODELS : []) {
+async function generateIllustration(geminiKey: string, prompt: string, state: ImgState): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  for (const model of geminiKey && !state.geminiBlocked ? IMAGE_MODELS : []) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 45_000);
@@ -200,7 +249,13 @@ async function generateIllustration(geminiKey: string, prompt: string): Promise<
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       return { bytes, mime: String(part.inlineData.mimeType || "image/png") };
     } catch (e) {
-      console.warn(`[generate-ebook] modelo de imagem ${model} falhou: ${(e as Error).message}`);
+      const msg = (e as Error).message;
+      if (msg.includes("429")) {
+        state.geminiBlocked = true;
+        console.warn(`[generate-ebook] Gemini imagem sem cota (429) — usando só Pollinations neste run para poupar a cota de texto`);
+      } else {
+        console.warn(`[generate-ebook] modelo de imagem ${model} falhou: ${msg}`);
+      }
     }
   }
   return await generatePollinationsImage(prompt);
@@ -224,11 +279,13 @@ async function makeIllustration(opts: {
   tema: string;
   paletteName: string;
   label: string;
+  state?: ImgState;
 }): Promise<string | null> {
   const { admin, geminiKey, path, desc, tema, paletteName, label } = opts;
+  const state = opts.state ?? { geminiBlocked: false };
   try {
     console.log(`[generate-ebook] Gerando ilustração ${label}...`);
-    const img = await generateIllustration(geminiKey, illustrationPrompt(desc, tema, paletteName));
+    const img = await generateIllustration(geminiKey, illustrationPrompt(desc, tema, paletteName), state);
     if (!img) {
       console.warn(`[generate-ebook] Erro ao gerar imagem ${label}, pulando...`);
       return null;
@@ -364,15 +421,13 @@ async function processInBackground(opts: {
   briefing: any;
 }) {
   const { admin, ebookId, userId, briefing } = opts;
+  const deadline = Date.now() + 330_000; // orçamento total da edge function
   try {
     // 7 a 12 capítulos (estrutura profissional)
     const chapters = Math.min(12, Math.max(7, Number(briefing.capitulos) || Math.round((Number(briefing.paginas) || 28) / 4)));
 
     console.log("[generate-ebook] fase 1: esqueleto", ebookId, `${chapters} capítulos`);
-    const outline: Outline = await callAIWithRetry(outlinePrompt(briefing, chapters), 4000);
-    if (!Array.isArray(outline.chapters) || outline.chapters.length === 0) {
-      throw new Error("Esqueleto inválido: sem capítulos");
-    }
+    const outline: Outline = await callAIWithRetry(outlinePrompt(briefing, chapters), 4000, 3, deadline, validateOutline);
     // Normaliza a quantidade planejada
     outline.chapters = outline.chapters.slice(0, chapters);
 
@@ -402,11 +457,19 @@ async function processInBackground(opts: {
     const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
     const palette = paletteFor(outline.title ?? briefing.tema ?? "ebook");
     const artBase = `${userId}/${ebookId}`;
-    // Ilustrações não dependem de chave: Gemini com cota → melhor qualidade;
-    // sem cota/chave → Pollinations.ai (gratuito, sem chave)
+    // Ilustrações: Gemini com cota → melhor qualidade; senão Pollinations
+    // (gratuito, sem chave). FILA SEQUENCIAL com intervalo — o Pollinations
+    // limita requisições concorrentes (paralelo = 429 em massa).
+    const imgState: ImgState = { geminiBlocked: false };
+    let imgChain: Promise<unknown> = Promise.resolve();
+    const enqueueIllustration = (o: Omit<Parameters<typeof makeIllustration>[0], "admin" | "geminiKey" | "state">): Promise<string | null> => {
+      const run = imgChain.then(() => makeIllustration({ admin, geminiKey, state: imgState, ...o }));
+      imgChain = run.then(() => sleep(4_000));
+      return run;
+    };
     const chapterImageTasks: Promise<string | null>[] = [];
-    const coverImageTask: Promise<string | null> = makeIllustration({
-      admin, geminiKey, path: `${artBase}/cover`,
+    const coverImageTask = enqueueIllustration({
+      path: `${artBase}/cover`,
       desc: `Imagem de capa conceitual sobre: ${outline.cover_promise || outline.subtitle || briefing.tema}. Público: ${briefing.publico_alvo}`,
       tema: briefing.tema, paletteName: palette.name, label: "da capa",
     });
@@ -417,7 +480,7 @@ async function processInBackground(opts: {
       const plan = outline.chapters[i];
       try {
         console.log(`[generate-ebook] fase 2: capítulo ${i + 1}/${outline.chapters.length}`, ebookId);
-        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 3600);
+        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 5000, 3, deadline, validateChapter);
         baseContent.chapters.push({
           title: plan.title,
           content: String(ch.content ?? ""),
@@ -427,22 +490,49 @@ async function processInBackground(opts: {
       } catch (e) {
         console.error(`[generate-ebook] capítulo ${i + 1} falhou definitivamente:`, (e as Error).message);
         failed.push(i + 1);
+        // NUNCA inserir texto placeholder fingindo capítulo: fica vazio e
+        // marcado — se a segunda passada não recuperar, o run inteiro falha
+        // com erro claro (e crédito devolvido) em vez de entregar PDF oco.
         baseContent.chapters.push({
           title: plan.title,
-          content: `[Falha ao gerar este capítulo automaticamente. Edite manualmente ou tente regenerar.]\n\n${plan.sections.map((s) => `### ${s}\n\n`).join("")}`,
+          content: "",
           acao_pratica: "",
           image_description: plan.image_description ?? "",
+          generation_failed: true,
         });
       }
       baseContent.progress = { done: i + 1, total: outline.chapters.length };
       // Salva progresso parcial — nada se perde se a próxima chamada falhar
       await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
-      // Dispara a ilustração deste capítulo em paralelo (não bloqueia o texto)
-      chapterImageTasks.push(makeIllustration({
-        admin, geminiKey, path: `${artBase}/ch-${i + 1}`,
+      // Enfileira a ilustração deste capítulo (fila roda em paralelo ao texto)
+      chapterImageTasks.push(enqueueIllustration({
+        path: `${artBase}/ch-${i + 1}`,
         desc: plan.image_description || plan.title,
         tema: briefing.tema, paletteName: palette.name, label: `do capítulo ${i + 1}`,
       }));
+    }
+
+    // ── Segunda passada: recupera capítulos que falharam (rate limit passa) ──
+    if (failed.length && Date.now() < deadline - 45_000) {
+      console.log(`[generate-ebook] segunda passada para capítulos com falha: ${failed.join(", ")} (aguardando janela de rate limit)`);
+      await sleep(30_000);
+      const recovered: number[] = [];
+      for (const n of failed) {
+        if (Date.now() > deadline - 20_000) break;
+        const i = n - 1;
+        try {
+          const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 5000, 2, deadline, validateChapter);
+          baseContent.chapters[i].content = String(ch.content ?? "");
+          baseContent.chapters[i].acao_pratica = String(ch.acao_pratica ?? "");
+          delete baseContent.chapters[i].generation_failed;
+          recovered.push(n);
+          await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+          console.log(`[generate-ebook] capítulo ${n} recuperado na segunda passada`);
+        } catch (e) {
+          console.warn(`[generate-ebook] capítulo ${n} falhou também na segunda passada: ${(e as Error).message.slice(0, 150)}`);
+        }
+      }
+      for (const n of recovered) failed.splice(failed.indexOf(n), 1);
     }
 
     // Anexa as ilustrações que ficaram prontas (falhas viram null e são puladas)
@@ -460,13 +550,24 @@ async function processInBackground(opts: {
     });
     console.log(`[generate-ebook] ilustrações prontas: ${okCount}/${chapterImageTasks.length + 1}`);
 
+    // Persiste as ilustrações mesmo que a checagem abaixo falhe o run —
+    // os capítulos bons (texto + imagem) ficam salvos para regeneração parcial.
+    await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+
+    // ── Garantia final: NENHUM capítulo vazio/raso passa como sucesso ──────
+    const badChapters = baseContent.chapters
+      .map((c: any, i: number) => (wordCount(c.content) < MIN_CHAPTER_WORDS ? i + 1 : 0))
+      .filter(Boolean);
+    if (badChapters.length) {
+      throw new Error(
+        `Não foi possível gerar o conteúdo do(s) capítulo(s) ${badChapters.join(", ")} — o provedor de IA atingiu o limite de requisições. ` +
+        `Seu crédito foi devolvido. Os capítulos prontos foram preservados: aguarde alguns minutos e use "Regenerar" neles no editor, ou gere o ebook novamente.`,
+      );
+    }
+
     const { error: updErr } = await admin
       .from("ebooks")
-      .update({
-        content: baseContent,
-        status: "completed",
-        error_message: failed.length ? `Capítulos com falha: ${failed.join(", ")} (conteúdo placeholder inserido)` : null,
-      })
+      .update({ content: baseContent, status: "completed", error_message: null })
       .eq("id", ebookId);
     if (updErr) throw new Error(updErr.message);
     console.log("[generate-ebook] concluído", ebookId);
@@ -516,6 +617,77 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
+
+    // ── Ação: regenerar UM capítulo (sem gastar crédito) ────────────────────
+    // Usada pelo botão ↻ do editor quando um capítulo falhou ou ficou fraco.
+    if (body.action === "regenerate_chapter") {
+      const ebookId = String(body.ebook_id ?? "");
+      const idx = Number(body.chapter_index);
+      if (!ebookId || !Number.isInteger(idx) || idx < 0) {
+        return json({ error: "ebook_id e chapter_index são obrigatórios" }, 400);
+      }
+      // client do usuário: RLS garante que só o dono acessa
+      const { data: eb, error: eErr } = await supabase.from("ebooks")
+        .select("id, title, content, status").eq("id", ebookId).single();
+      if (eErr || !eb) return json({ error: "Ebook não encontrado" }, 404);
+      const content: any = eb.content ?? {};
+      const chaptersArr: any[] = Array.isArray(content.chapters) ? content.chapters : [];
+      const ch = chaptersArr[idx];
+      if (!ch) return json({ error: "Capítulo não encontrado" }, 404);
+      const brief = content.briefing ?? {};
+      const sections = [...String(ch.content ?? "").matchAll(/^###\s+(.+)$/gm)]
+        .map((m) => m[1].trim()).filter(Boolean).slice(0, 5);
+      const prevTitles = chaptersArr.map((c, i2) => `${i2 + 1}. ${c?.title ?? ""}`).join("\n");
+      console.log(`[generate-ebook] regenerando capítulo ${idx + 1} do ebook ${ebookId}`);
+      const prompt = `Escreva o capítulo ${idx + 1} do ebook "${content.title ?? eb.title}" (tema: ${brief.tema ?? content.title ?? eb.title}; público: ${brief.publico_alvo ?? "leitores interessados no tema"}).
+
+CAPÍTULO ${idx + 1}: "${ch.title}"
+${sections.length ? `Seções (use exatamente estes subtítulos, nesta ordem, prefixados por "### "):\n${sections.map((s) => `- ${s}`).join("\n")}` : `Crie 3 a 5 seções internas, cada uma com subtítulo prefixado por "### ".`}
+
+Todos os capítulos do ebook (não repita conteúdo dos outros):
+${prevTitles}
+
+ESTRUTURA OBRIGATÓRIA do campo "content":
+1. Storytelling curto de abertura (1-2 parágrafos) conectado ao tema do capítulo.
+2. Seções ricas com os subtítulos "### ".
+3. Pelo menos 2 exemplos práticos brasileiros e dicas concretas.
+4. Total: 900 a 1300 palavras. Parágrafos separados por \\n\\n.
+
+${qualityRules(brief.idioma)}
+
+Retorne APENAS o JSON:
+{ "content": "...", "acao_pratica": "3 a 5 passos acionáveis, um por linha" }`;
+      const res = await callAIWithRetry(prompt, 5000, 3, Date.now() + 110_000, validateChapter);
+      chaptersArr[idx] = {
+        ...ch,
+        content: String(res.content ?? ""),
+        acao_pratica: String(res.acao_pratica ?? ch.acao_pratica ?? ""),
+      };
+      delete (chaptersArr[idx] as any).generation_failed;
+      // Ilustração se estiver faltando (direto no Pollinations — não gasta cota Gemini)
+      if (!chaptersArr[idx].image_url) {
+        const url = await makeIllustration({
+          admin, geminiKey: "", path: `${userId}/${ebookId}/ch-${idx + 1}`,
+          desc: ch.image_description || ch.title,
+          tema: String(brief.tema ?? content.title ?? ""),
+          paletteName: paletteFor(String(content.title ?? eb.title)).name,
+          label: `do capítulo ${idx + 1} (regeneração)`,
+        });
+        if (url) chaptersArr[idx].image_url = url;
+      }
+      content.chapters = chaptersArr;
+      // Se o ebook estava "failed" e agora todos os capítulos têm conteúdo
+      // completo, volta para "completed" (o PDF é liberado de novo no front).
+      const allComplete = chaptersArr.every((c) => wordCount(c?.content) >= MIN_CHAPTER_WORDS);
+      const statusPatch = (eb as any).status === "failed" && allComplete
+        ? { status: "completed", error_message: null }
+        : {};
+      const { error: uErr } = await admin.from("ebooks")
+        .update({ content, ...statusPatch }).eq("id", ebookId).eq("user_id", userId);
+      if (uErr) return json({ error: uErr.message }, 500);
+      return json({ ok: true, chapter: chaptersArr[idx], ...("status" in statusPatch ? { status: "completed" } : {}) });
+    }
+
     const testMode = body.test_mode === true;
     const paginas = Math.min(Math.max(Number(body.paginas) || Number(body.capitulos) * 4 || 28, 8), 60);
     const capitulos = Number(body.capitulos) || 7;

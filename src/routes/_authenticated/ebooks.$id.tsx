@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, ExternalLink, FileDown, Loader2, Megaphone, Pencil, Plus, RefreshCw, Save, Trash2, Upload, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { chapterBannerSvg, coverSvg, dividerSvg, fetchImageAsDataUrl, imageDimensions, paletteFor, svgDataUrl, svgToPngDataUrl } from "@/lib/ebook-art";
 
@@ -158,6 +158,7 @@ function EbookDetail() {
 
   const ec = editedContent ?? c;
 
+  const [regenIdx, setRegenIdx] = useState<number | null>(null);
   // Imagem de capa (IA ou upload) embutida como data URL para o preview SVG e o PDF
   const [coverEmbed, setCoverEmbed] = useState<string | null>(null);
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -235,6 +236,31 @@ function EbookDetail() {
       toast.success("Excluído");
       navigate({ to: "/ebooks" });
     } catch (e: any) { toast.error(e.message); setBusy(null); }
+  }
+
+  async function regenChapter(i: number) {
+    setRegenIdx(i);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-ebook", {
+        body: { action: "regenerate_chapter", ebook_id: id, chapter_index: i },
+      });
+      if (error) {
+        let msg = error.message;
+        try { const ctx: any = (error as any).context; if (ctx?.json) { const b = await ctx.json(); if (b?.error) msg = b.error; } } catch { /* noop */ }
+        throw new Error(msg);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const ch = (data as any).chapter;
+      setEditedContent((prev) => {
+        const chapters = [...(prev?.chapters ?? [])];
+        chapters[i] = { ...chapters[i], ...ch };
+        return { ...prev, chapters };
+      });
+      qc.invalidateQueries({ queryKey: ["ebook", id] });
+      toast.success(`Capítulo ${i + 1} regenerado!`);
+    } catch (e: any) {
+      toast.error(e.message ?? "Falha ao regenerar capítulo");
+    } finally { setRegenIdx(null); }
   }
 
   async function uploadCover(file: File) {
@@ -606,12 +632,19 @@ function EbookDetail() {
             </div>
           </div>
         )}
-        {status === "failed" && !renderable && (
+        {status === "failed" && (
           <div className="flex items-start gap-3 rounded-2xl border border-destructive/50 bg-card p-4">
             <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
             <div className="flex-1">
-              <div className="font-medium text-destructive">Falha na geração</div>
+              <div className="font-medium text-destructive">
+                {renderable ? "Geração incompleta — seu crédito foi devolvido" : "Falha na geração"}
+              </div>
               <div className="mt-1 text-xs text-muted-foreground">{(ebook as any).error_message ?? "Tente novamente."}</div>
+              {renderable && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Os capítulos prontos foram preservados. Use o botão ↻ nos capítulos marcados abaixo para completá-los (grátis) — o PDF é liberado quando todos estiverem completos.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -640,7 +673,8 @@ function EbookDetail() {
               <span className="ml-2">Salvar</span>
             </Button>
             <Button onClick={copyContent} disabled={!renderable} variant="outline"><Copy className="mr-2 h-4 w-4" /> Copiar</Button>
-            <Button onClick={downloadPDF} disabled={!renderable || busy === "pdf"} variant="outline">
+            <Button onClick={downloadPDF} disabled={!renderable || busy === "pdf" || status === "failed"} variant="outline"
+              title={status === "failed" ? "Complete os capítulos que faltam antes de baixar o PDF" : undefined}>
               {busy === "pdf" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
               Baixar PDF
             </Button>
@@ -704,8 +738,10 @@ function EbookDetail() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {(ec.chapters ?? []).map((ch, i) => (
-                  <div key={i} className="rounded-xl border border-border bg-surface p-3">
+                {(ec.chapters ?? []).map((ch, i) => {
+                  const chFailed = (ch as any).generation_failed === true || (ch.content ?? "").startsWith("[Falha ao gerar") || (status === "failed" && !(ch.content ?? "").trim());
+                  return (
+                  <div key={i} className={`rounded-xl border p-3 ${chFailed ? "border-amber-500/60 bg-amber-500/5" : "border-border bg-surface"}`}>
                     <div className="mb-2 flex items-center gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{i + 1}</span>
                       <Input
@@ -714,10 +750,23 @@ function EbookDetail() {
                         className="h-8 font-semibold"
                         placeholder="Título do capítulo"
                       />
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Regenerar este capítulo com IA (grátis)"
+                        onClick={() => regenChapter(i)} disabled={regenIdx !== null}>
+                        {regenIdx === i ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                      </Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => moveChapter(i, -1)} disabled={i === 0}><ChevronUp className="h-3 w-3" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => moveChapter(i, 1)} disabled={i === (ec.chapters?.length ?? 0) - 1}><ChevronDown className="h-3 w-3" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeChapter(i)}><X className="h-3 w-3" /></Button>
                     </div>
+                    {chFailed && (
+                      <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                        Este capítulo falhou na geração (limite de requisições da IA).
+                        <button type="button" className="font-semibold text-amber-700 underline" onClick={() => regenChapter(i)} disabled={regenIdx !== null}>
+                          Regenerar agora
+                        </button>
+                      </div>
+                    )}
                     {(ch as any).image_url ? (
                       <img
                         src={(ch as any).image_url}
@@ -750,7 +799,8 @@ function EbookDetail() {
                       placeholder="Passos acionáveis, um por linha…"
                     />
                   </div>
-                ))}
+                  );
+                })}
                 {(!ec.chapters || ec.chapters.length === 0) && (
                   <p className="py-4 text-center text-sm text-muted-foreground">Nenhum capítulo. Clique em "Adicionar capítulo".</p>
                 )}
