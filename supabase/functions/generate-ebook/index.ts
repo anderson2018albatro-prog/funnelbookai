@@ -139,11 +139,26 @@ function validateOutline(p: any): string | null {
 async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3, deadline = Infinity, validate?: (parsed: any) => string | null): Promise<any> {
   let lastErr: Error | null = null;
   for (let i = 0; i < tries; i++) {
+    // Orçamento por TENTATIVA: uma chamada em voo não é interrompida pelo
+    // deadline, então cada uma ganha um teto duro — sem isso, um provedor
+    // pendurado leva a function inteira ao wall clock (~400s) e o ebook
+    // morre órfão em "processing" (aconteceu 3x em produção).
+    const remaining = deadline - Date.now();
+    if (remaining < 20_000) {
+      console.warn("[generate-ebook] sem orçamento para nova tentativa de IA — abortando");
+      break;
+    }
+    const callCap = Math.min(110_000, remaining - 10_000);
     try {
-      const content = await chatCompletion([
-        { role: "system", content: SYSTEM_JSON },
-        { role: "user", content: prompt },
-      ], maxTokens);
+      const content = await Promise.race([
+        chatCompletion([
+          { role: "system", content: SYSTEM_JSON },
+          { role: "user", content: prompt },
+        ], maxTokens),
+        sleep(callCap).then(() => {
+          throw new Error(`chamada de IA excedeu ${Math.round(callCap / 1000)}s (teto de orçamento)`);
+        }),
+      ]);
       if (!content) throw new Error("Resposta vazia da IA");
       const parsed = parseLoose(content);
       const problem = validate?.(parsed);
@@ -187,6 +202,15 @@ function paletteFor(seed: string) {
 
 const IMAGE_MODELS = ["gemini-2.5-flash-image"];
 
+// Com billing ativo na conta Google, imagens do Gemini são COBRADAS
+// (~US$ 0,039/imagem ≈ R$ 1,70 por ebook de 8 imagens), enquanto o texto sai
+// por centavos. Para não gerar surpresa de custo, imagens Gemini ficam
+// desligadas por padrão (Pollinations gratuito cobre) e só ligam com o
+// secret GEMINI_PAID_IMAGES=on no Supabase.
+function geminiImagesEnabled(): boolean {
+  return (Deno.env.get("GEMINI_PAID_IMAGES") ?? "").toLowerCase() === "on";
+}
+
 // Fallback SEM chave: Pollinations.ai (gratuito). Limita requisições
 // concorrentes, então: retry em 429 com espera (a fila sequencial abaixo já
 // evita paralelismo).
@@ -221,7 +245,7 @@ type ImgState = { geminiBlocked: boolean };
 // Gera uma ilustração e retorna os bytes PNG/JPEG, ou null em falha (nunca lança)
 // Ordem: Gemini (se houver cota de imagem) → Pollinations (gratuito, sem chave)
 async function generateIllustration(geminiKey: string, prompt: string, state: ImgState): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  for (const model of geminiKey && !state.geminiBlocked ? IMAGE_MODELS : []) {
+  for (const model of geminiKey && geminiImagesEnabled() && !state.geminiBlocked ? IMAGE_MODELS : []) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 45_000);

@@ -44,11 +44,14 @@ function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function callOpenAI(key: string, messages: Msg[], maxTokens: number): Promise<string> {
   for (let attempt = 0; attempt <= 2; attempt++) {
+    const ctrl = new AbortController();
+    const tmr = setTimeout(() => ctrl.abort(), 60_000);
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
+      signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.7, max_tokens: maxTokens, response_format: { type: "json_object" }, messages }),
-    });
+    }).finally(() => clearTimeout(tmr));
     if (res.ok) {
       const j = await res.json();
       const c = j.choices?.[0]?.message?.content ?? "";
@@ -67,10 +70,15 @@ async function callOpenAI(key: string, messages: Msg[], maxTokens: number): Prom
 }
 
 async function callGemini(key: string, messages: Msg[], maxTokens: number): Promise<string> {
+  // Timeout próprio: sob rate limit pesado a API pode segurar a conexão por
+  // muito tempo — sem teto, a edge function chamadora estoura o wall clock.
+  const ctrl = new AbortController();
+  const tmr = setTimeout(() => ctrl.abort(), 90_000);
   const res = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     {
       method: "POST",
+      signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: "gemini-2.5-flash",
@@ -83,7 +91,7 @@ async function callGemini(key: string, messages: Msg[], maxTokens: number): Prom
         messages,
       }),
     }
-  );
+  ).finally(() => clearTimeout(tmr));
   if (res.ok) {
     const j = await res.json();
     const c = j.choices?.[0]?.message?.content ?? "";
