@@ -535,14 +535,19 @@ async function processInBackground(opts: {
       for (const n of recovered) failed.splice(failed.indexOf(n), 1);
     }
 
-    // Anexa as ilustrações que ficaram prontas (falhas viram null e são puladas)
-    console.log("[generate-ebook] aguardando ilustrações...");
-    const [coverRes, ...chapterRes] = await Promise.allSettled([coverImageTask, ...chapterImageTasks]);
-    const coverUrl = coverRes.status === "fulfilled" ? coverRes.value : null;
+    // Anexa as ilustrações que ficaram prontas (falhas viram null e são puladas).
+    // ESPERA LIMITADA: a fila de imagens não pode estourar o wall clock da
+    // function (~400s) — senão o runtime mata o processo e o ebook fica órfão
+    // em "processing". Ao esgotar o orçamento, anexa o que ficou pronto e segue.
+    const imgBudgetMs = Math.max(5_000, deadline - 20_000 - Date.now());
+    console.log(`[generate-ebook] aguardando ilustrações (máx ${Math.round(imgBudgetMs / 1000)}s)...`);
+    const imgTimeout = sleep(imgBudgetMs).then(() => "__timeout__" as const);
+    const bounded = (p: Promise<string | null>) =>
+      Promise.race([p.catch(() => null), imgTimeout]).then((v) => (v === "__timeout__" ? null : v));
+    const [coverUrl, ...chapterUrls] = await Promise.all([bounded(coverImageTask), ...chapterImageTasks.map(bounded)]);
     if (coverUrl) baseContent.cover_image_url = coverUrl;
     let okCount = coverUrl ? 1 : 0;
-    chapterRes.forEach((r, i) => {
-      const url = r.status === "fulfilled" ? r.value : null;
+    chapterUrls.forEach((url, i) => {
       if (url && baseContent.chapters[i]) {
         baseContent.chapters[i].image_url = url;
         okCount++;
