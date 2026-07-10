@@ -577,12 +577,19 @@ async function processInBackground(opts: {
       } else {
         console.log(`[generate-ebook] progresso salvo: ${i + 1}/${outline.chapters.length}`, ebookId);
       }
-      // Enfileira a ilustração deste capítulo (fila roda em paralelo ao texto)
-      chapterImageTasks.push(enqueueIllustration({
-        path: `${artBase}/ch-${i + 1}`,
-        desc: plan.image_description || plan.title,
-        tema: briefing.tema, paletteName: palette.name, label: `do capítulo ${i + 1}`,
-      }));
+      // Enfileira a ilustração deste capítulo (fila roda em paralelo ao texto).
+      // Capítulos ALTERNADOS (1, 3, 5...): o Pollinations gratuito limita
+      // requisições — metade das imagens = fila 2x mais rápida e confiável.
+      // Capítulos sem foto usam o banner artístico SVG automático no PDF.
+      if (i % 2 === 0) {
+        chapterImageTasks.push(enqueueIllustration({
+          path: `${artBase}/ch-${i + 1}`,
+          desc: plan.image_description || plan.title,
+          tema: briefing.tema, paletteName: palette.name, label: `do capítulo ${i + 1}`,
+        }));
+      } else {
+        chapterImageTasks.push(Promise.resolve(null));
+      }
     }
 
     // ── Segunda passada: recupera capítulos que falharam (rate limit passa) ──
