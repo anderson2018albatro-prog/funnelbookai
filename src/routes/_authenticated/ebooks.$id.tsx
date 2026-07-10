@@ -152,9 +152,15 @@ function EbookDetail() {
   const c = useMemo(() => normalizeEbookContent(ebookQ.data?.content), [ebookQ.data?.content]);
   const renderable = hasRenderableContent(c);
 
+  // Re-sincroniza o editor visual sempre que a geração avança (novo capítulo
+  // salvo) ou o status muda. Sem isso, abrir a página DURANTE o processing
+  // congelava o editor no snapshot vazio inicial — o ebook parecia "sem
+  // conteúdo" mesmo com os capítulos prontos no banco (só F5 resolvia).
+  const progressDone = c.progress?.done ?? -1;
   useEffect(() => {
-    if (c && !editedContent) setEditedContent({ ...c });
-  }, [c]);
+    if (c) setEditedContent({ ...c });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ebookQ.data?.id, (ebookQ.data as any)?.status, progressDone]);
 
   const ec = editedContent ?? c;
 
