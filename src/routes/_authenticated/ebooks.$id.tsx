@@ -441,7 +441,42 @@ function EbookDetail() {
         doc.addImage(png, "PNG", margin, y, maxW, h);
         y += h + 14;
       }
-      // Corpo com suporte a subtítulos "### " (hierarquia tipográfica)
+      // Item de lista (bullet ou numerado) com indentação e quebra de linha
+      function writeListItem(marker: string, text: string) {
+        doc.setFont("times", "normal");
+        doc.setFontSize(11.5);
+        const indent = 22;
+        const lines = doc.splitTextToSize(text.trim(), maxW - indent) as string[];
+        ensure(17);
+        doc.setTextColor(pr, pg, pb);
+        doc.text(marker, margin + 4, y);
+        doc.setTextColor(0);
+        for (const line of lines) {
+          ensure(16);
+          doc.text(line, margin + indent, y);
+          y += 16;
+        }
+        y += 3;
+      }
+      // Bloco de texto: separa parágrafos de itens de lista ("- " / "• " / "1. ")
+      function writeTextBlock(block: string) {
+        const lines = block.split(/\n/);
+        let para: string[] = [];
+        const flush = () => {
+          if (para.length) { writeParagraph(para.join(" ")); para = []; }
+        };
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line) { flush(); continue; }
+          const bullet = line.match(/^[-•*]\s+(.*)$/);
+          const numbered = line.match(/^(\d{1,2})[.)]\s+(.*)$/);
+          if (bullet) { flush(); writeListItem("•", bullet[1]); }
+          else if (numbered) { flush(); writeListItem(`${numbered[1]}.`, numbered[2]); }
+          else para.push(line);
+        }
+        flush();
+      }
+      // Corpo com suporte a subtítulos "### " (hierarquia tipográfica) e listas
       function writeBody(text: string) {
         const blocks = String(text ?? "").split(/\n\n+/);
         for (const block of blocks) {
@@ -451,12 +486,12 @@ function EbookDetail() {
             const nl = b.indexOf("\n");
             if (nl > 0) {
               writeSubtitle(b.slice(4, nl).trim());
-              writeParagraph(b.slice(nl + 1));
+              writeTextBlock(b.slice(nl + 1));
             } else {
               writeSubtitle(b.slice(4).trim());
             }
           } else {
-            writeParagraph(b);
+            writeTextBlock(b);
           }
         }
         y += 4;

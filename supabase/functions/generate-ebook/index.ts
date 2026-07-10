@@ -112,9 +112,9 @@ function wordCount(s: unknown): number {
   return String(s ?? "").trim().split(/\s+/).filter(Boolean).length;
 }
 
-// Piso de aceitação de um capítulo. O prompt pede 900-1300 palavras; abaixo
+// Piso de aceitação de um capítulo. O prompt pede 1100-1600 palavras; abaixo
 // disto o conteúdo veio truncado/raso e é tratado como falha (gera retry).
-const MIN_CHAPTER_WORDS = 300;
+const MIN_CHAPTER_WORDS = 350;
 
 function validateChapter(p: any): string | null {
   const wc = wordCount(p?.content);
@@ -367,7 +367,7 @@ CAMPOS:
 - introduction: introdução com GANCHO EMOCIONAL — comece com uma cena, pergunta ou dor real do leitor; 3-4 parágrafos separados por \\n\\n; termine dizendo o que o leitor vai conquistar
 - chapters: EXATAMENTE ${chapters} objetos, cada um com:
   - title: título específico e curioso do capítulo
-  - sections: 3 a 5 subtítulos das seções internas do capítulo
+  - sections: 4 a 6 subtítulos das seções internas do capítulo (seções concretas e acionáveis, não genéricas)
   - image_description: descrição de 1 imagem ilustrativa para o capítulo (1 frase, ex: "Mulher sorrindo preparando refeição saudável na cozinha")
 - conclusion: 2-3 parágrafos amarrando a transformação prometida
 - call_to_action: 1 parágrafo persuasivo convidando para ${briefing.uso === "gratuito" ? "o próximo passo com o autor" : "conhecer a oferta do autor"}
@@ -398,17 +398,25 @@ ${ch.sections.map((s) => `- ${s}`).join("\n")}
 Capítulos anteriores (não repita conteúdo):
 ${prevTitles}
 
+PADRÃO INFOPRODUTO PROFISSIONAL — o leitor PAGOU por este conteúdo; entregue profundidade de curso, não resumo de blog.
+
 ESTRUTURA OBRIGATÓRIA do campo "content":
-1. Abra com um storytelling curto (1-2 parágrafos): uma mini-história, cena ou caso real que conecta com o tema do capítulo.
-2. Depois, cada seção: comece a seção com o subtítulo prefixado por "### " (ex: "### ${ch.sections[0] ?? "Subtítulo"}"), seguido de 2-4 parágrafos de conteúdo rico.
-3. Inclua pelo menos 2 exemplos práticos brasileiros, dicas concretas e, quando couber, números/dados que tornem o texto convincente para "${briefing.publico_alvo}".
-4. Total: 900 a 1300 palavras — capítulo COMPLETO e aprofundado, não um resumo. Cada seção com 3-5 parágrafos ricos. Parágrafos separados por \\n\\n.
+1. Abra com um storytelling curto (1-2 parágrafos): uma mini-história, cena ou caso real que conecta com a dor do leitor neste capítulo.
+2. Cada seção: comece com o subtítulo prefixado por "### " (ex: "### ${ch.sections[0] ?? "Subtítulo"}") e entregue:
+   - 2-4 parágrafos densos: o QUÊ, o PORQUÊ e o COMO (nunca só teoria)
+   - pelo menos UMA lista na seção: passo a passo numerado ("1. ", "2. ", cada passo em sua própria linha) OU bullets ("- item") com itens específicos e executáveis
+   - números, dados, faixas de preço/tempo ou comparações concretas que sustentem o argumento
+3. Ao longo do capítulo, OBRIGATÓRIO incluir:
+   - 2+ exemplos práticos brasileiros com contexto real (nome fictício, situação, o que fez, resultado)
+   - 1 erro comum que iniciantes cometem + como evitar
+   - 1 dica avançada/atalho que demonstre profundidade
+4. Total: 1100 a 1600 palavras — capítulo COMPLETO e aprofundado. Parágrafos separados por \\n\\n; itens de lista um por linha começando com "- " ou "1. ".
 
 ${qualityRules(briefing.idioma)}
 
 Retorne APENAS o JSON:
 {
-  "content": "storytelling de abertura\\n\\n### Primeiro subtítulo\\n\\nconteúdo...\\n\\n### Segundo subtítulo\\n\\nconteúdo...",
+  "content": "storytelling de abertura\\n\\n### Primeiro subtítulo\\n\\nparágrafos...\\n\\n1. Primeiro passo\\n2. Segundo passo\\n\\n### Segundo subtítulo\\n\\nparágrafos...\\n\\n- bullet específico\\n- outro bullet",
   "acao_pratica": "Box 'Ação Prática': 3 a 5 passos acionáveis que o leitor executa hoje, um por linha separados por \\n"
 }`;
 }
@@ -448,8 +456,8 @@ async function processInBackground(opts: {
   const deadline = Date.now() + 330_000; // orçamento total da edge function
   let completedMarked = false; // após completed, falha tardia (imagens) não reverte nem refunda
   try {
-    // 7 a 12 capítulos (estrutura profissional)
-    const chapters = Math.min(12, Math.max(7, Number(briefing.capitulos) || Math.round((Number(briefing.paginas) || 28) / 4)));
+    // 8 a 12 capítulos (padrão infoproduto: 8 caps × 1100-1600 palavras ≈ 28-36 páginas)
+    const chapters = Math.min(12, Math.max(8, Number(briefing.capitulos) || Math.round((Number(briefing.paginas) || 30) / 4)));
 
     console.log("[generate-ebook] fase 1: esqueleto", ebookId, `${chapters} capítulos`);
     const outline: Outline = await callAIWithRetry(outlinePrompt(briefing, chapters), 4000, 3, deadline, validateOutline);
@@ -527,7 +535,7 @@ async function processInBackground(opts: {
       }
       try {
         console.log(`[generate-ebook] fase 2: capítulo ${i + 1}/${outline.chapters.length}`, ebookId);
-        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 5000, 3, deadline, validateChapter);
+        const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 6000, 3, deadline, validateChapter);
         baseContent.chapters.push({
           title: plan.title,
           content: String(ch.content ?? ""),
@@ -574,7 +582,7 @@ async function processInBackground(opts: {
         if (Date.now() > deadline - 20_000) break;
         const i = n - 1;
         try {
-          const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 5000, 2, deadline, validateChapter);
+          const ch = await callAIWithRetry(chapterPrompt(briefing, outline, i), 6000, 2, deadline, validateChapter);
           baseContent.chapters[i].content = String(ch.content ?? "");
           baseContent.chapters[i].acao_pratica = String(ch.acao_pratica ?? "");
           delete baseContent.chapters[i].generation_failed;
@@ -784,7 +792,7 @@ ${qualityRules(brief.idioma)}
 
 Retorne APENAS o JSON:
 { "content": "...", "acao_pratica": "3 a 5 passos acionáveis, um por linha" }`;
-      const res = await callAIWithRetry(prompt, 5000, 3, Date.now() + 110_000, validateChapter);
+      const res = await callAIWithRetry(prompt, 6000, 3, Date.now() + 110_000, validateChapter);
       chaptersArr[idx] = {
         ...ch,
         content: String(res.content ?? ""),
