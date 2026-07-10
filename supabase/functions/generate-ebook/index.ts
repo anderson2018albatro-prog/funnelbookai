@@ -122,9 +122,13 @@ function validateChapter(p: any): string | null {
   return null;
 }
 
-function validateOutline(p: any): string | null {
+function validateOutline(p: any, expectedChapters = 0): string | null {
   if (!String(p?.title ?? "").trim()) return "esqueleto sem título";
   if (!Array.isArray(p?.chapters) || p.chapters.length === 0) return "esqueleto sem capítulos";
+  // A IA às vezes ignora o "EXATAMENTE N" — menos capítulos = ebook raso; reprova e regenera
+  if (expectedChapters > 0 && p.chapters.length < expectedChapters) {
+    return `esqueleto veio com ${p.chapters.length} capítulos (pedido: ${expectedChapters})`;
+  }
   const bad = p.chapters.findIndex((c: any) =>
     !String(c?.title ?? "").trim() || !Array.isArray(c?.sections) || c.sections.length === 0);
   if (bad >= 0) return `capítulo ${bad + 1} do esqueleto sem título ou sem seções`;
@@ -150,11 +154,17 @@ async function callAIWithRetry(prompt: string, maxTokens: number, tries = 3, dea
     }
     const callCap = Math.min(110_000, remaining - 10_000);
     try {
+      const aiPromise = chatCompletion([
+        { role: "system", content: SYSTEM_JSON },
+        { role: "user", content: prompt },
+      ], maxTokens);
+      // CRÍTICO: se o teto (sleep) vencer a corrida, a promise da IA fica órfã.
+      // Quando ela rejeitar depois (timeout/429 tardio), a rejeição NÃO TRATADA
+      // mata o isolate inteiro do Deno — o run morre sem passar pelo catch e o
+      // ebook fica órfão em "processing" (aconteceu 2x em produção hoje).
+      aiPromise.catch(() => { /* rejeição tardia engolida de propósito */ });
       const content = await Promise.race([
-        chatCompletion([
-          { role: "system", content: SYSTEM_JSON },
-          { role: "user", content: prompt },
-        ], maxTokens),
+        aiPromise,
         sleep(callCap).then(() => {
           throw new Error(`chamada de IA excedeu ${Math.round(callCap / 1000)}s (teto de orçamento)`);
         }),
@@ -373,6 +383,8 @@ CAMPOS:
 - call_to_action: 1 parágrafo persuasivo convidando para ${briefing.uso === "gratuito" ? "o próximo passo com o autor" : "conhecer a oferta do autor"}
 - bonus: 2 a 4 ideias de bônus acionáveis
 
+CONFIRA ANTES DE RESPONDER: o array "chapters" DEVE ter EXATAMENTE ${chapters} objetos — nem um a menos. Resposta com menos capítulos será rejeitada.
+
 Retorne APENAS o JSON:
 {
   "title": string,
@@ -460,7 +472,7 @@ async function processInBackground(opts: {
     const chapters = Math.min(12, Math.max(8, Number(briefing.capitulos) || Math.round((Number(briefing.paginas) || 30) / 4)));
 
     console.log("[generate-ebook] fase 1: esqueleto", ebookId, `${chapters} capítulos`);
-    const outline: Outline = await callAIWithRetry(outlinePrompt(briefing, chapters), 4000, 3, deadline, validateOutline);
+    const outline: Outline = await callAIWithRetry(outlinePrompt(briefing, chapters), 5000, 3, deadline, (p) => validateOutline(p, chapters));
     // Normaliza a quantidade planejada
     outline.chapters = outline.chapters.slice(0, chapters);
 
