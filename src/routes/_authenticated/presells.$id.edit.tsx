@@ -26,6 +26,7 @@ function EditPresell() {
   const qc = useQueryClient();
   const [blocks, setBlocks] = useState<PresellBlocks | null>(null);
   const [affUrl, setAffUrl] = useState("");
+  const [officialUrl, setOfficialUrl] = useState("");
   const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
   const [theme, setTheme] = useState<PresellTheme>(DEFAULT_THEME);
   const [pixels, setPixels] = useState<PresellPixels>({ facebook: "", google: "" });
@@ -62,6 +63,7 @@ function EditPresell() {
     }
     setBlocks(initial);
     setAffUrl(row.affiliate_url || "");
+    setOfficialUrl(initial.official_url || row.source_url || "");
     setDisclosure(initial.disclosure_text || DEFAULT_DISCLOSURE);
     setTheme(initial.theme || DEFAULT_THEME);
     setPixels(initial.pixels ?? { facebook: "", google: "" });
@@ -96,13 +98,13 @@ function EditPresell() {
     if (!affValid) { toast.error("Link de afiliado inválido"); return; }
     setSaving(true);
     try {
-      const b: PresellBlocks = { ...blocks, affiliate_url: affUrl, disclosure_text: disclosure, theme, pixels };
+      const b: PresellBlocks = { ...blocks, affiliate_url: affUrl, official_url: officialUrl.trim(), disclosure_text: disclosure, theme, pixels };
       const title = b.data.headline.title || page.title;
       const html = renderPresellHtml(b, title, page.slug);
       const { error } = await supabase.from("presells")
         .update({
           blocks: b, html_content: html, title,
-          affiliate_url: affUrl, disclosure_text: disclosure,
+          affiliate_url: affUrl, source_url: officialUrl.trim() || null, disclosure_text: disclosure,
         }).eq("id", id);
       if (error) throw error;
       toast.success("Presell salva");
@@ -129,7 +131,7 @@ function EditPresell() {
     window.open(affUrl, "_blank", "noopener,noreferrer");
   }
 
-  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", disclosure_text: disclosure, theme, pixels }, page.title, page.slug);
+  const previewHtml = renderPresellHtml({ ...blocks, affiliate_url: affUrl || "#", official_url: officialUrl.trim(), disclosure_text: disclosure, theme, pixels }, page.title, page.slug);
   const isProcessing = page.status === "processing";
 
   return (
@@ -170,6 +172,13 @@ function EditPresell() {
                 {affValid ? <><Check className="h-3 w-3" /> URL válida</> : <><X className="h-3 w-3" /> URL inválida</>}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Parâmetros são preservados. Nada é encurtado ou mascarado.</p>
+              <div className="mt-3">
+                <Label>Link da página oficial do produto (opcional)</Label>
+                <Input value={officialUrl} onChange={(e) => setOfficialUrl(e.target.value)} placeholder="https://siteoficial.com/produto" />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Aparece como menção complementar (abaixo do CTA final e no rodapé). O link de afiliado continua sendo o CTA principal.
+                </p>
+              </div>
             </div>
 
             {/* Theme */}

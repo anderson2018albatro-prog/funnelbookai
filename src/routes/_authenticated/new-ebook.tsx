@@ -191,7 +191,7 @@ function NewEbook() {
         <Button type="submit" disabled={mut.isPending} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
           {mut.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Iniciando…</>) : (<><Sparkles className="mr-2 h-4 w-4" /> Gerar Ebook</>)}
         </Button>
-        <p className="text-center text-xs text-muted-foreground">Consome 1 crédito. A geração leva ~30-60s e é processada em background.</p>
+        <p className="text-center text-xs text-muted-foreground">Consome 1 crédito. A geração leva de 2 a 6 minutos (capítulo a capítulo) e é processada em background — se algo falhar, o crédito é devolvido automaticamente.</p>
       </form>
     </DashboardShell>
   );

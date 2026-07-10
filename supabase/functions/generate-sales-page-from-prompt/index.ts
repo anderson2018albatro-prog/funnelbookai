@@ -73,6 +73,10 @@ BRIEFING ADICIONAL:
 - Garantia: ${form.garantia || "(sugira garantia incondicional)"}
 - Link do botão (checkout Hotmart/Kiwify): ${form.button_url || "#"}
 
+REGRAS DE AUTONOMIA (obrigatórias):
+- O usuário forneceu o MÍNIMO de informação de propósito: DEDUZA todo o resto (nicho, público, dores, preço plausível, tom, garantia) do comando e do briefing — você monta a página COMPLETA sozinho.
+- PROIBIDO deixar qualquer campo vazio, genérico ou com placeholder tipo "[insira aqui]", "XXX" ou "a definir". Toda seção sai pronta para publicar.
+
 PASSO 1 — ESCOLHA A ESTRUTURA. Analise o pedido (tipo de produto, preço, nicho, público) e escolha a MELHOR estrutura no campo "estrutura":
 - "vsl": página de VSL — headline + vídeo + bullets + oferta (produtos que dependem de vídeo de vendas)
 - "carta": carta de vendas longa PAS completo (problema-agitação-solução; produtos que precisam de convencimento)

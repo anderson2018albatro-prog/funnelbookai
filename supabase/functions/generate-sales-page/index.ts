@@ -1,7 +1,13 @@
 // Edge Function: generate-sales-page
-// Cria/atualiza a página em "processing" e gera o HTML em background.
+// Gera a página de vendas COMPLETA a partir de um ebook — zero input manual:
+// todo o contexto (nicho, público, promessa, capítulos) vem do próprio ebook.
+// A IA escolhe a MELHOR estrutura (vsl, carta, lançamento, low/high ticket,
+// assinatura) e escreve a copy inteira. Usa o mesmo sistema de blocos
+// compartilhado (_shared/sales-blocks.ts) do fluxo "Criar com IA".
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { chatCompletion } from "../_shared/ai.ts";
+import { jsonrepair } from "https://esm.sh/jsonrepair@3.6.1";
+import { buildBlocksFromAI, renderBlocksToHtml } from "../_shared/sales-blocks.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,12 +32,6 @@ function slugify(input: string) {
   );
 }
 
-function esc(s: string) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c] as string));
-}
-
 function stripFences(s: string) {
   let c = s.trim();
   if (c.startsWith("```")) c = c.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
@@ -40,7 +40,7 @@ function stripFences(s: string) {
   return c;
 }
 
-function repairJson(s: string): string {
+function repairControlChars(s: string): string {
   s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
   let inStr = false, escaped = false, out = "";
   for (let i = 0; i < s.length; i++) {
@@ -56,126 +56,91 @@ function repairJson(s: string): string {
   return out;
 }
 
-function buildBlocks(sp: any, fallbackTitle: string) {
-  // Depoimentos placeholder claramente marcados — nunca apresentados como reais
-  const testimonials = [
-    { name: "Maria S.", text: "Conteúdo incrível, me ajudou muito!", stars: 5, placeholder: true },
-    { name: "João P.", text: "Exatamente o que eu precisava para avançar.", stars: 5, placeholder: true },
-    { name: "Ana R.", text: "Linguagem clara e prática. Recomendo!", stars: 4, placeholder: true },
-  ];
-
-  return {
-    order: ["hero","product","promessa","beneficios","para_quem","aprendizado","bonus","depoimentos","oferta","garantia","faq","final_cta"],
-    data: {
-      hero: { visible: true, headline: sp.headline ?? fallbackTitle, subheadline: sp.subheadline ?? "", cta_text: sp.cta ?? "Quero agora" },
-      product: { visible: false, image_url: "", video_url: "" },
-      promessa: { visible: true, title: "A grande promessa", text: sp.promessa_principal ?? "" },
-      beneficios: { visible: true, title: "Benefícios", items: sp.beneficios ?? [] },
-      para_quem: { visible: true, title: "Para quem é", items: sp.para_quem ?? [] },
-      aprendizado: { visible: true, title: "O que você vai aprender", items: sp.aprendizado ?? [] },
-      bonus: { visible: (sp.bonus ?? []).length > 0, title: "🎁 Bônus exclusivos", items: sp.bonus ?? [] },
-      depoimentos: { visible: true, title: "O que dizem os leitores", items: testimonials, is_placeholder: true },
-      oferta: { visible: true, title: "Oferta especial", description: sp.oferta ?? "", price: "", cta_text: sp.cta ?? "Quero agora", cta_url: "#cta-final" },
-      garantia: { visible: !!sp.garantia, title: "✅ Garantia", text: sp.garantia ?? "" },
-      faq: { visible: (sp.faq ?? []).length > 0, title: "Perguntas frequentes", items: sp.faq ?? [] },
-      final_cta: { visible: true, headline: sp.headline ?? fallbackTitle, cta_text: sp.cta ?? "Garantir o meu agora", cta_url: "#" },
-    },
-  };
+function parseLoose(raw: string): any {
+  const cleaned = repairControlChars(stripFences(raw));
+  try { return JSON.parse(cleaned); } catch { /* continua */ }
+  return JSON.parse(jsonrepair(cleaned));
 }
 
-function buildHtml(sp: any, title: string) {
-  const list = (arr: string[] = []) => arr.map((b) => `<li>${esc(b)}</li>`).join("");
-  const beneficios = list(sp.beneficios);
-  const bullets = list(sp.aprendizado);
-  const paraQuem = list(sp.para_quem);
-  const bonus = list(sp.bonus);
-  const faq = (sp.faq ?? []).map((f: any) =>
-    `<details><summary>${esc(f.pergunta)}</summary><p>${esc(f.resposta)}</p></details>`
-  ).join("");
+const SYSTEM =
+  "Você é um copywriter brasileiro especialista em resposta direta (direct response) e páginas de vendas de alta conversão para o mercado digital brasileiro (Hotmart, Kiwify, Eduzz). Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON. Dentro de strings use \\n para quebras de linha.";
 
-  const testimonials = [
-    { name: "Maria S.", text: "Conteúdo incrível, me ajudou muito!", stars: 5 },
-    { name: "João P.", text: "Exatamente o que eu precisava para avançar.", stars: 5 },
-    { name: "Ana R.", text: "Linguagem clara e prática. Recomendo!", stars: 4 },
-  ];
-  const testimonialsHtml = testimonials.map((t) =>
-    `<div class="testimonial"><div class="t-stars">${"⭐".repeat(t.stars)}</div><p class="t-text">"${esc(t.text)}"</p><strong class="t-name">— ${esc(t.name)}</strong></div>`
-  ).join("");
+function salesPagePrompt(ebook: any): string {
+  const ec = (ebook.content ?? {}) as any;
+  const chapters: string[] = Array.isArray(ec?.summary) && ec.summary.length
+    ? ec.summary
+    : (Array.isArray(ec?.chapters) ? ec.chapters.map((c: any) => String(c?.title ?? "")).filter(Boolean) : []);
+  const idioma = ec?.briefing?.idioma || "Português brasileiro";
 
-  return `<!DOCTYPE html>
-<html lang="pt-BR"><head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>${esc(sp.headline ?? title)}</title>
-<meta name="description" content="${esc(sp.subheadline ?? "")}" />
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;line-height:1.6;color:#0f172a;background:#fff}
-.wrap{max-width:880px;margin:0 auto;padding:24px 16px}
-.hero{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:64px 16px;text-align:center}
-.hero h1{font-size:clamp(28px,5vw,52px);font-weight:800;line-height:1.15;max-width:880px;margin:0 auto}
-.hero p{font-size:clamp(16px,2.4vw,20px);opacity:.95;max-width:720px;margin:18px auto 0}
-.cta{display:inline-block;background:#fff;color:#6366f1;font-weight:700;padding:16px 32px;border-radius:12px;text-decoration:none;margin-top:28px;box-shadow:0 8px 24px rgba(0,0,0,.15)}
-section{padding:48px 0;border-bottom:1px solid #e5e7eb}
-h2{font-size:clamp(22px,3vw,32px);margin-bottom:20px;text-align:center}
-.promise{background:#f8fafc;padding:32px;border-radius:16px;text-align:center;font-size:18px;font-weight:500}
-ul.feat{list-style:none;display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-ul.feat li{background:#f1f5f9;padding:16px 20px;border-radius:12px;border-left:4px solid #6366f1}
-.testimonials{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-.testimonial{background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:20px}
-.t-stars{font-size:18px;margin-bottom:8px}
-.t-text{font-style:italic;color:#334155;margin-bottom:10px}
-.t-name{font-size:14px;color:#64748b}
-.placeholder-notice{text-align:center;font-size:12px;color:#94a3b8;margin-top:12px;font-style:italic}
-.offer{background:linear-gradient(135deg,#f5f3ff,#ede9fe);padding:40px;border-radius:20px;text-align:center}
-.offer .cta{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
-.bonus{background:#fef3c7;padding:24px;border-radius:14px}
-.bonus h3{margin-bottom:12px;color:#92400e}
-.bonus ul{padding-left:20px}
-.guarantee{background:#ecfdf5;border:2px solid #10b981;padding:28px;border-radius:16px;text-align:center}
-.guarantee h3{color:#065f46;margin-bottom:10px}
-details{background:#f8fafc;padding:16px 20px;border-radius:10px;margin-bottom:10px;cursor:pointer}
-details summary{font-weight:600;list-style:none}
-.final{background:#0f172a;color:#fff;padding:64px 16px;text-align:center}
-.final h2{color:#fff}
-.final .cta{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
-footer{padding:24px;text-align:center;color:#64748b;font-size:13px}
-</style></head>
-<body>
-<header class="hero">
-  <h1>${esc(sp.headline ?? title)}</h1>
-  <p>${esc(sp.subheadline ?? "")}</p>
-  <a class="cta" href="#oferta">${esc(sp.cta ?? "Quero agora")}</a>
-</header>
+  return `Crie uma página de vendas COMPLETA em ${idioma} para o ebook abaixo.
+Você é o único responsável pela página INTEIRA: estrutura, hierarquia de seções
+e toda a copy. PROIBIDO deixar campo vazio, genérico ou com placeholder tipo
+"[insira aqui]" — se faltar informação, DEDUZA do contexto com bom senso.
 
-<section class="wrap"><h2>A grande promessa</h2><div class="promise">${esc(sp.promessa_principal ?? "")}</div></section>
+CONTEXTO DO EBOOK:
+- Título: ${ebook.title}
+- Subtítulo: ${ec?.subtitle ?? ""}
+- Introdução: ${String(ec?.introduction ?? "").slice(0, 600)}
+- Nicho: ${ebook.niche ?? ""}
+- Público-alvo: ${ec?.briefing?.publico_alvo ?? ""}
+- Promessa: ${ec?.briefing?.promessa ?? ""}
+- Problema que resolve: ${ec?.briefing?.problema ?? ""}
+- Capítulos: ${chapters.join(" | ")}
 
-${beneficios ? `<section class="wrap"><h2>Benefícios</h2><ul class="feat">${beneficios}</ul></section>` : ""}
-${paraQuem ? `<section class="wrap"><h2>Para quem é</h2><ul class="feat">${paraQuem}</ul></section>` : ""}
-${bullets ? `<section class="wrap"><h2>O que você vai aprender</h2><ul class="feat">${bullets}</ul></section>` : ""}
+PASSO 1 — ESCOLHA A ESTRUTURA no campo "estrutura" (a melhor para um ebook,
+normalmente "carta" ou "low_ticket"): vsl | carta | lancamento | low_ticket |
+high_ticket | assinatura.
 
-<section class="wrap"><h2>O que dizem os leitores</h2>
-  <div class="testimonials">${testimonialsHtml}</div>
-  <p class="placeholder-notice">⚠️ Depoimentos de exemplo — substitua pelos reais antes de publicar.</p>
-</section>
+PASSO 2 — COPY BRASILEIRA DE RESPOSTA DIRETA (todos os campos obrigatórios):
+- headline: big idea + benefício + curiosidade (mínimo 8 palavras, específica)
+- subheadline: aprofunda a promessa (mínimo 12 palavras)
+- dor_titulo: título curto da seção de dor
+- dor_lead: 2-3 parágrafos separados por \\n\\n que agitam a dor real do público do ebook
+- mecanismo: NOMEIE o método do ebook (nome próprio memorável) + descrição de por que funciona quando tudo falhou
+- promessa_principal: a transformação central em 2-3 frases
+- beneficios: MÍNIMO 8 bullets de fascínio (curiosidade + benefício específico, ex: "O erro nº 1 que trava seus resultados — e como corrigir em 5 min")
+- para_quem: mínimo 5 perfis específicos
+- aprendizado: mínimo 6 tópicos concretos EXTRAÍDOS DOS CAPÍTULOS REAIS do ebook
+- stack: mínimo 4 itens com valor percebido ancorado (ex: {"item":"Ebook completo com ${chapters.length || 7} capítulos","valor":"R$97"}) + valor_total com a soma ancorada
+- price: preço sugerido coerente com a estrutura escolhida (ex: "R$47 à vista")
+- ancoragem: 1 frase de ancoragem de preço (ex: "Menos que uma pizza")
+- bonus: mínimo 3 bônus com valores
+- garantia: incondicional, com prazo
+- urgencia: escassez/urgência ÉTICA e real (bônus por tempo limitado, aumento de preço) — NUNCA contadores ou prazos falsos
+- faq: mínimo 5 perguntas quebrando objeções reais (tempo, preço, "já tentei antes", acesso, garantia)
+- cta: texto de botão urgente e acionável
+- oferta: resumo da oferta em 1-2 frases
 
-<section class="wrap" id="oferta"><h2>Oferta especial</h2>
-  <div class="offer">
-    <p style="font-size:20px;margin-bottom:24px">${esc(sp.oferta ?? "")}</p>
-    <a class="cta" href="#cta-final">${esc(sp.cta ?? "Quero agora")}</a>
-  </div>
-</section>
+COPYWRITING ÉTICO (OBRIGATÓRIO): sem promessas falsas ou resultados garantidos,
+sem clickbait enganoso, sem urgência inventada. NUNCA escreva depoimentos como
+se fossem reais — a seção de prova social da página usa exemplos claramente
+marcados como ilustrativos, para o autor substituir pelos reais.
 
-${bonus ? `<section class="wrap"><div class="bonus"><h3>🎁 Bônus exclusivos</h3><ul>${bonus}</ul></div></section>` : ""}
-${sp.garantia ? `<section class="wrap"><div class="guarantee"><h3>✅ Garantia</h3><p>${esc(sp.garantia)}</p></div></section>` : ""}
-${faq ? `<section class="wrap"><h2>Perguntas frequentes</h2>${faq}</section>` : ""}
-
-<section class="final" id="cta-final">
-  <h2>${esc(sp.headline ?? title)}</h2>
-  <a class="cta" href="#" onclick="alert('Configure seu link de pagamento');return false">${esc(sp.cta ?? "Garantir o meu agora")}</a>
-</section>
-<footer>Criado com FunnelBook AI</footer>
-</body></html>`;
+Retorne APENAS o JSON:
+{
+  "estrutura": "vsl|carta|lancamento|low_ticket|high_ticket|assinatura",
+  "headline": string,
+  "subheadline": string,
+  "dor_titulo": string,
+  "dor_lead": string,
+  "mecanismo": {"nome": string, "descricao": string},
+  "promessa_principal": string,
+  "beneficios": string[],
+  "para_quem": string[],
+  "aprendizado": string[],
+  "stack": [{"item": string, "valor": string}],
+  "valor_total": string,
+  "price": string,
+  "ancoragem": string,
+  "oferta": string,
+  "bonus": string[],
+  "garantia": string,
+  "urgencia": string,
+  "faq": [{"pergunta": string, "resposta": string}],
+  "cta": string,
+  "video_titulo": string,
+  "button_url": "#"
+}`;
 }
 
 async function processInBackground(opts: {
@@ -185,56 +150,20 @@ async function processInBackground(opts: {
 }) {
   const { admin, pageId, ebook } = opts;
   try {
-    const ec = ebook.content as any;
-    const ctx = `Título do ebook: ${ebook.title}
-Subtítulo: ${ec?.subtitle ?? ""}
-Introdução: ${(ec?.introduction ?? "").slice(0, 600)}
-Nicho: ${ebook.niche ?? ""}
-Público-alvo: ${ec?.briefing?.publico_alvo ?? ""}
-Promessa: ${ec?.briefing?.promessa ?? ""}
-Problema que resolve: ${ec?.briefing?.problema ?? ""}
-Capítulos: ${(ec?.summary ?? []).join(" | ")}`;
-
-    const prompt = `Crie uma página de vendas de ALTA CONVERSÃO em português para este ebook:
-
-${ctx}
-
-PADRÃO DE QUALIDADE:
-- headline: impactante, com promessa clara e específica (mínimo 8 palavras)
-- subheadline: complementa a headline e aumenta a curiosidade (mínimo 12 palavras)
-- promessa_principal: 2-3 frases que detalham o maior benefício transformacional
-- beneficios: mínimo 6 benefícios específicos e mensuráveis (não genéricos)
-- para_quem: mínimo 5 perfis específicos de público-alvo
-- aprendizado: mínimo 6 tópicos específicos que o leitor vai dominar
-- bonus: mínimo 3 bônus com descrição do valor percebido
-- garantia: texto de garantia que remove o risco da compra
-- faq: mínimo 5 perguntas respondendo objeções reais de compra
-- cta: texto do botão urgente e acionável
-
-Retorne APENAS JSON válido (sem texto fora do JSON, sem cercas de código):
-{
-  "headline": "headline poderosa aqui",
-  "subheadline": "subheadline complementar aqui",
-  "promessa_principal": "promessa detalhada aqui",
-  "beneficios": ["benefício específico 1", "benefício específico 2"],
-  "para_quem": ["perfil específico 1", "perfil específico 2"],
-  "aprendizado": ["tópico específico 1", "tópico específico 2"],
-  "oferta": "descrição da oferta com preço e condições",
-  "bonus": ["Bônus 1: descrição", "Bônus 2: descrição"],
-  "garantia": "texto da garantia",
-  "faq": [{"pergunta": "pergunta real", "resposta": "resposta detalhada"}],
-  "cta": "texto do botão"
-}`;
-
+    console.log("[generate-sales-page] chamando IA", pageId);
     const raw = await chatCompletion([
-      { role: "system", content: "Você é um copywriter de alta conversão. Responda APENAS com JSON válido, sem markdown, sem cercas de código (```), sem texto fora do JSON." },
-      { role: "user", content: prompt },
-    ], 2500);
+      { role: "system", content: SYSTEM },
+      { role: "user", content: salesPagePrompt(ebook) },
+    ], 5000);
     if (!raw) throw new Error("Resposta vazia da IA");
-    const sp = JSON.parse(repairJson(stripFences(raw)));
+    console.log("[generate-sales-page] resposta recebida, parseando", pageId);
+    const sp = parseLoose(raw);
+    sp.button_url = sp.button_url || "#";
+    sp.theme = sp.theme || "clean";
     const title = sp.headline ?? ebook.title;
-    const html = buildHtml(sp, title);
-    const blocks = buildBlocks(sp, title);
+    const blocks = buildBlocksFromAI(sp, title);
+    const html = renderBlocksToHtml(blocks, title);
+    console.log("[generate-sales-page] salvando no banco", pageId, "estrutura:", sp.estrutura);
     const { error } = await admin.from("sales_pages").update({
       title, html_content: html, blocks, status: "completed", error_message: null,
     }).eq("id", pageId);
@@ -243,10 +172,50 @@ Retorne APENAS JSON válido (sem texto fora do JSON, sem cercas de código):
   } catch (e) {
     const msg = (e as Error).message ?? "Falha desconhecida";
     console.error("[generate-sales-page] falhou", pageId, msg);
-    await admin.from("sales_pages")
+    const { error: failErr } = await admin.from("sales_pages")
       .update({ status: "failed", error_message: msg })
       .eq("id", pageId);
+    if (failErr) console.error("[generate-sales-page] CRÍTICO: não conseguiu marcar failed:", failErr.message);
   }
+}
+
+function mockSalesData(ebook: any): any {
+  const ec = (ebook.content ?? {}) as any;
+  const chapters: string[] = Array.isArray(ec?.summary) ? ec.summary : [];
+  return {
+    estrutura: "carta",
+    headline: `Descubra o Método ${ebook.title}`,
+    subheadline: ec?.subtitle ?? "O guia definitivo para transformar sua vida",
+    dor_titulo: "Você se identifica com isso?",
+    dor_lead: `Você já tentou de tudo e nada funcionou.\n\nA cada nova tentativa, a frustração aumenta.\n\n[MODO MOCK]`,
+    mecanismo: { nome: "Método Tripla Alavanca", descricao: "Um processo em 3 fases que ataca a causa raiz. [MODO MOCK]" },
+    promessa_principal: ec?.briefing?.promessa ?? "Resultados reais em 30 dias",
+    beneficios: chapters.slice(0, 8).length >= 3 ? chapters.slice(0, 8) : ["Benefício 1", "Benefício 2", "Benefício 3"],
+    para_quem: ["Iniciantes que querem começar do zero", "Quem busca resultados duradouros", "Quem tem pouco tempo", "Quem já tentou sem sucesso", "Quem quer um passo a passo claro"],
+    aprendizado: chapters.slice(0, 6).length ? chapters.slice(0, 6) : ["Tópico 1", "Tópico 2", "Tópico 3"],
+    stack: [
+      { item: "Ebook completo", valor: "R$97" },
+      { item: "Materiais de apoio", valor: "R$47" },
+      { item: "Atualizações vitalícias", valor: "R$53" },
+      { item: "Checklist de implementação", valor: "R$27" },
+    ],
+    valor_total: "R$224",
+    price: "R$47 à vista",
+    ancoragem: "Menos que uma pizza para transformar seus resultados",
+    oferta: "Acesso completo por apenas R$47",
+    bonus: ["Bônus 1: Guia rápido (valor R$27)", "Bônus 2: Planilha de acompanhamento (valor R$27)"],
+    garantia: "30 dias de garantia incondicional",
+    urgencia: "Os bônus desta página ficam disponíveis apenas nesta condição de lançamento.",
+    faq: [
+      { pergunta: "Para quem é?", resposta: ec?.briefing?.publico_alvo ?? "Para qualquer pessoa." },
+      { pergunta: "Como acesso?", resposta: "Por e-mail em até 5 minutos após a compra." },
+      { pergunta: "Tem garantia?", resposta: "Sim, 30 dias incondicional." },
+    ],
+    cta: "Garantir meu acesso agora",
+    video_titulo: "Assista ao vídeo",
+    button_url: "#",
+    theme: "clean",
+  };
 }
 
 Deno.serve(async (req) => {
@@ -259,12 +228,13 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (!serviceKey) return json({ error: "SUPABASE_SERVICE_ROLE_KEY não configurada" }, 500);
-    if (!lovableKey && !geminiKey && !openaiKey) {
-      return json({ error: "Configure GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
+    if (!anthropicKey && !lovableKey && !geminiKey && !openaiKey) {
+      return json({ error: "Configure ANTHROPIC_API_KEY, GEMINI_API_KEY (gratuito), LOVABLE_API_KEY ou OPENAI_API_KEY" }, 500);
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnon, {
@@ -320,27 +290,10 @@ Deno.serve(async (req) => {
     }
 
     if (testMode) {
-      const ec = ebook.content as any;
-      const mockSp = {
-        headline: `Descubra o Método ${ebook.title}`,
-        subheadline: ec?.subtitle ?? "O guia definitivo para transformar sua vida",
-        promessa_principal: ec?.briefing?.promessa ?? "Resultados reais em 30 dias",
-        beneficios: (ec?.summary ?? []).slice(0, 5).map((s: string) => s) || ["Benefício 1","Benefício 2","Benefício 3"],
-        para_quem: ["Iniciantes que querem começar do zero", "Quem busca resultados rápidos e duradouros"],
-        aprendizado: (ec?.chapters ?? []).slice(0, 5).map((c: any) => c.title) || [],
-        oferta: "Acesso completo por apenas R$ 97",
-        price: "R$ 97",
-        bonus: ["Bônus: Guia de implementação rápida", "Bônus: Planilha de acompanhamento"],
-        garantia: "30 dias de garantia incondicional",
-        faq: [
-          { pergunta: "Para quem é?", resposta: ec?.briefing?.publico_alvo ?? "Para qualquer pessoa." },
-          { pergunta: "Como acesso?", resposta: "Por e-mail em até 5 minutos após a compra." },
-        ],
-        cta: "Garantir meu acesso agora",
-      };
+      const mockSp = mockSalesData(ebook);
       const title = mockSp.headline;
-      const html = buildHtml(mockSp, title);
-      const blocks = buildBlocks(mockSp, title);
+      const blocks = buildBlocksFromAI(mockSp, title);
+      const html = renderBlocksToHtml(blocks, title);
       await admin.from("sales_pages").update({ title, html_content: html, blocks, status: "completed", error_message: null }).eq("id", pageId);
       return json({ pageId, slug, status: "completed", test_mode: true }, 201);
     }

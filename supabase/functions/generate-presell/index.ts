@@ -538,6 +538,8 @@ Retorne APENAS o JSON:
       : undefined;
 
     const blocks = buildBlocks(p, presell_type, affiliate_url, productImage, DEFAULT_DISCLOSURE, siteTheme, whatsapp_phone, whatsapp_message, pixels, cta_delay);
+    // Página oficial do produto: menção complementar na presell (o CTA principal segue sendo o link de afiliado)
+    (blocks as any).official_url = source_url || "";
     const title = p.headline || info?.og_title || info?.title || "Presell";
 
     const { error } = await admin.from("presells").update({
@@ -670,6 +672,7 @@ Deno.serve(async (req) => {
         } : null,
       };
       const blocks = buildBlocks(mockP, presell_type, affiliate_url, "", DEFAULT_DISCLOSURE, undefined, whatsapp_phone, whatsapp_message, pixels, cta_delay);
+      (blocks as any).official_url = source_url || "";
       const title = mockP.headline;
       const { data: created, error: insErr } = await admin.from("presells").insert({
         user_id: userId, title, slug, source_url, affiliate_url, presell_type, tone, language,

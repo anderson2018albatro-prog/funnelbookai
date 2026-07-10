@@ -159,6 +159,36 @@ function EbookDetail() {
   const ec = editedContent ?? c;
 
   const [regenIdx, setRegenIdx] = useState<number | null>(null);
+
+  // ── Watchdog: geração órfã em "processing" ─────────────────────────────
+  // O backend salva progresso (e portanto atualiza updated_at) a cada capítulo.
+  // Se o status é "processing" mas o updated_at parou há 8+ min, o processo em
+  // background morreu sem conseguir marcar "failed" (wall clock/crash). Chama a
+  // ação "reconcile" no servidor, que valida a estagnação, marca failed e
+  // devolve o crédito — em vez de deixar o usuário olhando "gerando…" eterno.
+  const STALL_MS = 8 * 60_000;
+  const rowBeat = (ebookQ.data as any)?.updated_at ?? (ebookQ.data as any)?.created_at;
+  const isStalled =
+    (ebookQ.data as any)?.status === "processing" &&
+    !!rowBeat &&
+    Date.now() - new Date(rowBeat).getTime() > STALL_MS;
+  const reconcileRef = useRef(false);
+  useEffect(() => {
+    if (!isStalled || reconcileRef.current) return;
+    reconcileRef.current = true;
+    supabase.functions
+      .invoke("generate-ebook", { body: { action: "reconcile", ebook_id: id } })
+      .then(({ data }) => {
+        if ((data as any)?.reconciled) {
+          toast.error("A geração foi interrompida no servidor. Seu crédito foi devolvido.");
+        }
+        qc.invalidateQueries({ queryKey: ["ebook", id] });
+      })
+      .catch(() => {
+        // permite nova tentativa no próximo ciclo de polling
+        reconcileRef.current = false;
+      });
+  }, [isStalled, id, qc]);
   // Imagem de capa (IA ou upload) embutida como data URL para o preview SVG e o PDF
   const [coverEmbed, setCoverEmbed] = useState<string | null>(null);
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -614,7 +644,7 @@ function EbookDetail() {
   return (
     <DashboardShell title={ebook.title}>
       <div className="mx-auto max-w-4xl space-y-5">
-        {status === "processing" && (
+        {status === "processing" && !isStalled && (
           <div className="flex items-center gap-3 rounded-2xl border border-primary/40 bg-gradient-card p-4 shadow-elegant">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <div className="flex-1">
@@ -630,6 +660,18 @@ function EbookDetail() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+        {status === "processing" && isStalled && (
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-500/50 bg-card p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+            <div className="flex-1">
+              <div className="font-medium">A geração parou de responder</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                O servidor não envia progresso há vários minutos. Estamos encerrando esta geração e devolvendo seu crédito automaticamente…
+              </div>
+            </div>
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         )}
         {status === "failed" && (

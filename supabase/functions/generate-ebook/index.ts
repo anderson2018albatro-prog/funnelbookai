@@ -470,10 +470,15 @@ async function processInBackground(opts: {
       briefing,
       progress: { done: 0, total: outline.chapters.length },
     };
-    await admin.from("ebooks").update({
+    const { error: outlineSaveErr } = await admin.from("ebooks").update({
       title: outline.title ?? "Ebook sem título",
       content: baseContent,
     }).eq("id", ebookId);
+    if (outlineSaveErr) {
+      // Sem o esqueleto salvo o polling do front nunca mostra progresso — falha alto
+      throw new Error(`Falha ao salvar o esqueleto no banco: ${outlineSaveErr.message}`);
+    }
+    console.log("[generate-ebook] esqueleto salvo no banco", ebookId);
 
     // Ilustrações (Gemini): rodam em PARALELO com a geração de texto e são
     // anexadas ao final. Qualquer falha de imagem apenas pula aquela imagem —
@@ -543,8 +548,14 @@ async function processInBackground(opts: {
         });
       }
       baseContent.progress = { done: i + 1, total: outline.chapters.length };
-      // Salva progresso parcial — nada se perde se a próxima chamada falhar
-      await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+      // Salva progresso parcial — nada se perde se a próxima chamada falhar.
+      // O updated_at deste UPDATE é o heartbeat que o watchdog do front observa.
+      const { error: chSaveErr } = await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+      if (chSaveErr) {
+        console.error(`[generate-ebook] ERRO ao salvar progresso do capítulo ${i + 1}: ${chSaveErr.message}`);
+      } else {
+        console.log(`[generate-ebook] progresso salvo: ${i + 1}/${outline.chapters.length}`, ebookId);
+      }
       // Enfileira a ilustração deste capítulo (fila roda em paralelo ao texto)
       chapterImageTasks.push(enqueueIllustration({
         path: `${artBase}/ch-${i + 1}`,
@@ -620,16 +631,34 @@ async function processInBackground(opts: {
   } catch (e) {
     const msg = (e as Error).message ?? "Falha desconhecida";
     console.error("[generate-ebook] falhou", ebookId, msg);
-    await admin
-      .from("ebooks")
-      .update({ status: "failed", error_message: msg })
-      .eq("id", ebookId);
-    // devolve o crédito
-    const { data: cr } = await admin
-      .from("user_credits").select("credits").eq("user_id", userId).maybeSingle();
-    if (cr) {
-      await admin.from("user_credits")
-        .update({ credits: (cr.credits ?? 0) + 1 }).eq("user_id", userId);
+    // Se marcar "failed" der errado, o ebook fica órfão em "processing" —
+    // loga alto e tenta de novo uma vez; o watchdog do front (reconcile) é a rede final.
+    try {
+      const { error: failErr } = await admin
+        .from("ebooks")
+        .update({ status: "failed", error_message: msg })
+        .eq("id", ebookId);
+      if (failErr) {
+        console.error(`[generate-ebook] CRÍTICO: não conseguiu marcar failed (${failErr.message}) — tentando de novo`);
+        await sleep(2000);
+        const { error: retryErr } = await admin
+          .from("ebooks")
+          .update({ status: "failed", error_message: msg })
+          .eq("id", ebookId);
+        if (retryErr) console.error(`[generate-ebook] CRÍTICO: segunda tentativa de marcar failed também falhou: ${retryErr.message}`);
+      }
+      // devolve o crédito
+      const { data: cr, error: crErr } = await admin
+        .from("user_credits").select("credits").eq("user_id", userId).maybeSingle();
+      if (crErr) console.error(`[generate-ebook] ERRO ao ler créditos para refund: ${crErr.message}`);
+      if (cr) {
+        const { error: refundErr } = await admin.from("user_credits")
+          .update({ credits: (cr.credits ?? 0) + 1 }).eq("user_id", userId);
+        if (refundErr) console.error(`[generate-ebook] ERRO ao devolver crédito: ${refundErr.message}`);
+        else console.log("[generate-ebook] crédito devolvido", userId);
+      }
+    } catch (e2) {
+      console.error("[generate-ebook] CRÍTICO: exceção ao marcar falha/devolver crédito:", (e2 as Error).message);
     }
   }
 }
@@ -663,6 +692,48 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
+
+    // ── Ação: reconciliar ebook órfão em "processing" ───────────────────────
+    // O processamento em background tem orçamento de ~330s; se o runtime matar
+    // o processo (wall clock, crash, redeploy) antes do catch rodar, o ebook
+    // fica preso em "processing" para sempre. O frontend chama esta ação quando
+    // detecta que o heartbeat (updated_at) parou. A checagem de tempo é feita
+    // AQUI, server-side, para ninguém forjar refund de uma geração saudável.
+    if (body.action === "reconcile") {
+      const ebookId = String(body.ebook_id ?? "");
+      if (!ebookId) return json({ error: "ebook_id é obrigatório" }, 400);
+      // client do usuário: RLS garante que só o dono enxerga/reconcilia
+      const { data: eb, error: eErr } = await supabase.from("ebooks")
+        .select("id, status, updated_at, created_at").eq("id", ebookId).single();
+      if (eErr || !eb) return json({ error: "Ebook não encontrado" }, 404);
+      if (eb.status !== "processing") return json({ reconciled: false, status: eb.status });
+      const lastBeat = new Date((eb as any).updated_at ?? (eb as any).created_at).getTime();
+      const STALL_MS = 8 * 60_000; // > orçamento total (330s) + wall clock, com folga
+      if (Date.now() - lastBeat < STALL_MS) {
+        return json({ reconciled: false, status: "processing" });
+      }
+      console.error(`[generate-ebook] reconcile: ebook ${ebookId} órfão em processing (último heartbeat ${(eb as any).updated_at}) — marcando failed e devolvendo crédito`);
+      const { data: updated, error: updErr } = await admin.from("ebooks")
+        .update({
+          status: "failed",
+          error_message:
+            "A geração foi interrompida inesperadamente no servidor. Seu crédito foi devolvido — os capítulos prontos foram preservados; tente gerar novamente ou use \"Regenerar\" nos capítulos que faltam.",
+        })
+        .eq("id", ebookId).eq("status", "processing")
+        .select("id");
+      if (updErr) return json({ error: updErr.message }, 500);
+      // Refund só se ESTA chamada fez a transição (evita refund duplo em corrida)
+      if (updated && updated.length > 0) {
+        const { data: cr } = await admin
+          .from("user_credits").select("credits").eq("user_id", userId).maybeSingle();
+        if (cr) {
+          await admin.from("user_credits")
+            .update({ credits: (cr.credits ?? 0) + 1 }).eq("user_id", userId);
+        }
+        return json({ reconciled: true, status: "failed" });
+      }
+      return json({ reconciled: false, status: "failed" });
+    }
 
     // ── Ação: regenerar UM capítulo (sem gastar crédito) ────────────────────
     // Usada pelo botão ↻ do editor quando um capítulo falhou ou ficou fraco.

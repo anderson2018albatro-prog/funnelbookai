@@ -206,10 +206,13 @@ function NewPresell() {
 
           {!isGate && (
             <div>
-              <Label>Link da página/produto a analisar</Label>
+              <Label>Link da página oficial do produto</Label>
               <Input value={form.source_url} onChange={(e) => set("source_url", e.target.value)}
                 placeholder="https://siteoficial.com/produto" />
-              <p className="mt-1 text-xs text-muted-foreground">Opcional. A IA extrai título, descrição e benefícios automaticamente.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Opcional. A IA extrai título, descrição e benefícios automaticamente — e o link aparece na presell como
+                menção complementar ("página oficial"), separado do link de afiliado, que continua sendo o CTA principal.
+              </p>
             </div>
           )}
 

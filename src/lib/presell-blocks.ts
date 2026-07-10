@@ -30,6 +30,8 @@ export type PresellBlocks = {
   type: PresellType;
   order: PresellBlockKey[];
   affiliate_url: string;
+  /** Link da página oficial do produto (informação complementar; o CTA principal continua sendo o link de afiliado). */
+  official_url?: string;
   disclosure_text: string;
   theme: PresellTheme;
   pixels?: PresellPixels;
@@ -666,6 +668,13 @@ export function renderPresellHtml(blocks: PresellBlocks, fallbackTitle: string, 
   const theme = blocks.theme ?? DEFAULT_THEME;
   const order = (blocks.order ?? defaultOrderFor(blocks.type)) as PresellBlockKey[];
   const disclosure = blocks.disclosure_text || DEFAULT_DISCLOSURE;
+  // Página oficial do produto: exibida como informação complementar discreta
+  // (o link de afiliado continua sendo o CTA principal em todos os botões).
+  const officialUrl = String(blocks.official_url ?? "").trim();
+  let officialHost = "";
+  if (officialUrl) {
+    try { officialHost = new URL(officialUrl).hostname.replace(/^www\./, ""); } catch { officialHost = officialUrl; }
+  }
   const sec: string[] = [];
 
   const ctaButton = (label: string, variant: "primary" | "large" = "primary") =>
@@ -881,7 +890,10 @@ else{var nx=box.querySelector('[data-qs="'+n+'"]');if(nx)nx.style.display='block
         break;
       case "cta":
         sec.push(section(
-          `<div class="finalcta">${ctaButton(b.text || "Acessar site oficial", "large")}${b.note ? `<p class="note">${esc(b.note)}</p>` : ""}</div>`
+          `<div class="finalcta">${ctaButton(b.text || "Acessar site oficial", "large")}
+<div class="cta-extras"><button type="button" class="copylink-btn" data-copy-aff="1">🔗 Copiar link</button></div>
+${b.note ? `<p class="note">${esc(b.note)}</p>` : ""}
+${officialUrl ? `<p class="official-link">Prefere pesquisar antes? <a href="${esc(officialUrl)}" target="_blank" rel="noopener nofollow">Visite a página oficial do produto</a></p>` : ""}</div>`
         ));
         break;
     }
@@ -935,6 +947,22 @@ else{var nx=box.querySelector('[data-qs="'+n+'"]');if(nx)nx.style.display='block
 <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${fbId}&ev=PageView&noscript=1"/></noscript>` : ""}${gId ? `
 <script async src="https://www.googletagmanager.com/gtag/js?id=${gId}"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gId}');</script>` : ""}`;
+
+  // Botão "Copiar link": copia o link de afiliado com feedback "✓ Copiado!".
+  // Delegação global (um script para todos os botões data-copy-aff) — evita
+  // problemas de aspas/escape que um onclick inline com a URL teria.
+  const affJs = JSON.stringify(aff).replace(/</g, "\\u003c");
+  const copyLinkScript = `<script>
+document.addEventListener('click',function(e){
+var t=e.target&&e.target.closest?e.target.closest('[data-copy-aff]'):null;if(!t||t.dataset.copying)return;
+var url=${affJs};
+function done(){t.dataset.copying='1';var old=t.textContent;t.textContent='\\u2713 Copiado!';t.classList.add('copied');
+setTimeout(function(){t.textContent=old;t.classList.remove('copied');delete t.dataset.copying;},2000);}
+function fallback(){var ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';
+document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(err){/* noop */}document.body.removeChild(ta);}
+if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(done).catch(fallback);}else{fallback();}
+});
+</script>`;
 
   // CTA com delay configurável (ex.: VSL — botão aparece após N segundos)
   const ctaDelay = Math.max(0, Number(d.cta?.reveal_after_seconds) || 0);
@@ -1008,6 +1036,12 @@ figcaption{margin-top:10px;font-size:13px;color:var(--muted)}
 .faq summary::after{content:"+";font-size:22px;font-weight:300;color:var(--p)}.faq[open] summary::after{content:"−"}
 .faq p{margin-top:12px;color:#334155}
 .finalcta{text-align:center;padding:20px 0}.note{margin-top:14px;color:var(--muted);font-size:13px}
+.cta-extras{margin-top:14px}
+.copylink-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:9px 20px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.copylink-btn:hover{border-color:var(--p);color:var(--p)}
+.copylink-btn.copied{border-color:#10b981;color:#065f46;background:#ecfdf5}
+.official-link{margin-top:10px;font-size:13px;color:var(--muted)}
+.official-link a{color:inherit;text-decoration:underline}
 .cta{display:inline-block;background:linear-gradient(135deg,var(--p),var(--a));color:#fff;font-weight:700;padding:18px 36px;border-radius:14px;text-decoration:none;box-shadow:0 10px 30px rgba(99,102,241,.35);transition:transform .15s ease,box-shadow .15s ease;font-size:17px}
 .cta:hover{transform:translateY(-1px);box-shadow:0 14px 36px rgba(99,102,241,.45)}
 .cta-large{padding:20px 44px;font-size:18px;margin-top:28px}
@@ -1062,11 +1096,13 @@ ${sec.join("\n")}
 <p class="disclosure">${esc(disclosure)}</p>
 ${hasIllustrative ? `<p class="foot-note">Os depoimentos e comentários exibidos nesta página são conteúdo ilustrativo.</p>` : ""}
 <p class="foot-note">Resultados podem variar de pessoa para pessoa. Nenhum resultado específico é garantido.</p>
+${officialUrl ? `<p class="foot-note">Página oficial do produto: <a href="${esc(officialUrl)}" target="_blank" rel="noopener nofollow" style="color:inherit;text-decoration:underline">${esc(officialHost)}</a></p>` : ""}
 <p>© ${new Date().getFullYear()}. Conteúdo independente. · <a href="${privacyHref}" style="color:inherit;text-decoration:underline">Política de Privacidade</a></p>
 </footer>
 ${stickyCta}
 ${cookieOverlay}
 ${waHtml}
+${copyLinkScript}
 ${ctaDelayHtml}
 </body></html>`;
 }

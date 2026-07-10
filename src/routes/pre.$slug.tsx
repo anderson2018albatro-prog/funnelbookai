@@ -17,13 +17,18 @@ const fetchPresell = createServerFn({ method: "GET" })
     );
     const { data: row } = await client
       .from("presells")
-      .select("title, slug, html_content, blocks, is_published, product_image_url")
+      .select("title, slug, html_content, blocks, is_published, product_image_url, source_url")
       .eq("slug", data.slug)
       .eq("is_published", true)
       .maybeSingle();
     if (!row) return null;
-    const html = row.blocks
-      ? renderPresellHtml(row.blocks as PresellBlocks, row.title, row.slug)
+    // official_url dos blocks tem prioridade; source_url (página analisada pela
+    // IA) serve de fallback — presells antigas ganham o link oficial sem re-salvar.
+    const blocks = row.blocks
+      ? { ...(row.blocks as PresellBlocks), official_url: (row.blocks as any).official_url || row.source_url || "" }
+      : null;
+    const html = blocks
+      ? renderPresellHtml(blocks, row.title, row.slug)
       : (row.html_content ?? "");
     return { title: row.title, slug: row.slug, html, og_image: row.product_image_url ?? null };
   });
