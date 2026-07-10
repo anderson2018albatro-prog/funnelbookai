@@ -446,6 +446,7 @@ async function processInBackground(opts: {
 }) {
   const { admin, ebookId, userId, briefing } = opts;
   const deadline = Date.now() + 330_000; // orçamento total da edge function
+  let completedMarked = false; // após completed, falha tardia (imagens) não reverte nem refunda
   try {
     // 7 a 12 capítulos (estrutura profissional)
     const chapters = Math.min(12, Math.max(7, Number(briefing.capitulos) || Math.round((Number(briefing.paginas) || 28) / 4)));
@@ -587,10 +588,33 @@ async function processInBackground(opts: {
       for (const n of recovered) failed.splice(failed.indexOf(n), 1);
     }
 
-    // Anexa as ilustrações que ficaram prontas (falhas viram null e são puladas).
+    // ── Garantia final: NENHUM capítulo vazio/raso passa como sucesso ──────
+    const badChapters = baseContent.chapters
+      .map((c: any, i: number) => (wordCount(c.content) < MIN_CHAPTER_WORDS ? i + 1 : 0))
+      .filter(Boolean);
+    if (badChapters.length) {
+      throw new Error(
+        `Não foi possível gerar o conteúdo do(s) capítulo(s) ${badChapters.join(", ")} — o provedor de IA atingiu o limite de requisições. ` +
+        `Seu crédito foi devolvido. Os capítulos prontos foram preservados: aguarde alguns minutos e use "Regenerar" neles no editor, ou gere o ebook novamente.`,
+      );
+    }
+
+    // Texto completo e validado → marca COMPLETED AGORA, antes das ilustrações.
+    // A fase de imagens é a mais lenta e frágil (rate limit, wall clock, kill do
+    // runtime) — em produção um run morreu aqui com o texto 7/7 pronto e o ebook
+    // ficou órfão em "processing". O texto É o produto; imagens são bônus
+    // anexado a seguir se der tempo (os banners SVG programáticos cobrem faltas).
+    const { error: updErr } = await admin
+      .from("ebooks")
+      .update({ content: baseContent, status: "completed", error_message: null })
+      .eq("id", ebookId);
+    if (updErr) throw new Error(updErr.message);
+    completedMarked = true;
+    console.log("[generate-ebook] texto completo — ebook marcado como completed", ebookId);
+
+    // Anexa as ilustrações que ficarem prontas (falhas viram null e são puladas).
     // ESPERA LIMITADA: a fila de imagens não pode estourar o wall clock da
-    // function (~400s) — senão o runtime mata o processo e o ebook fica órfão
-    // em "processing". Ao esgotar o orçamento, anexa o que ficou pronto e segue.
+    // function (~400s). Ao esgotar o orçamento, anexa o que ficou pronto e segue.
     const imgBudgetMs = Math.max(5_000, deadline - 20_000 - Date.now());
     console.log(`[generate-ebook] aguardando ilustrações (máx ${Math.round(imgBudgetMs / 1000)}s)...`);
     const imgTimeout = sleep(imgBudgetMs).then(() => "__timeout__" as const);
@@ -606,31 +630,17 @@ async function processInBackground(opts: {
       }
     });
     console.log(`[generate-ebook] ilustrações prontas: ${okCount}/${chapterImageTasks.length + 1}`);
-
-    // Persiste as ilustrações mesmo que a checagem abaixo falhe o run —
-    // os capítulos bons (texto + imagem) ficam salvos para regeneração parcial.
-    await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
-
-    // ── Garantia final: NENHUM capítulo vazio/raso passa como sucesso ──────
-    const badChapters = baseContent.chapters
-      .map((c: any, i: number) => (wordCount(c.content) < MIN_CHAPTER_WORDS ? i + 1 : 0))
-      .filter(Boolean);
-    if (badChapters.length) {
-      throw new Error(
-        `Não foi possível gerar o conteúdo do(s) capítulo(s) ${badChapters.join(", ")} — o provedor de IA atingiu o limite de requisições. ` +
-        `Seu crédito foi devolvido. Os capítulos prontos foram preservados: aguarde alguns minutos e use "Regenerar" neles no editor, ou gere o ebook novamente.`,
-      );
-    }
-
-    const { error: updErr } = await admin
-      .from("ebooks")
-      .update({ content: baseContent, status: "completed", error_message: null })
-      .eq("id", ebookId);
-    if (updErr) throw new Error(updErr.message);
+    const { error: imgSaveErr } = await admin.from("ebooks").update({ content: baseContent }).eq("id", ebookId);
+    if (imgSaveErr) console.error(`[generate-ebook] ERRO ao salvar ilustrações: ${imgSaveErr.message}`);
     console.log("[generate-ebook] concluído", ebookId);
   } catch (e) {
     const msg = (e as Error).message ?? "Falha desconhecida";
     console.error("[generate-ebook] falhou", ebookId, msg);
+    if (completedMarked) {
+      // Ebook já entregue (texto completo) — falha tardia é só nas imagens.
+      console.warn("[generate-ebook] falha após completed (fase de imagens) — mantendo completed, sem refund");
+      return;
+    }
     // Se marcar "failed" der errado, o ebook fica órfão em "processing" —
     // loga alto e tenta de novo uma vez; o watchdog do front (reconcile) é a rede final.
     try {
